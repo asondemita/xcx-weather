@@ -6,7 +6,7 @@
 
 - **時間別予報**（n時間後）… 天気・気温・降水確率・風速・風向き・WBGT（暑さ指数）
 - **週間予報**（最大7日先）… 天気・最高気温・最低気温・降水確率・日の出・日の入り
-- **地名** … 郵便番号が解決された地名（日本語）
+- **気象予報地点名** … 郵便番号付近で天気データに使われる地点の名前（日本語）
 
 天気データは無料の [Open-Meteo](https://open-meteo.com/) API、郵便番号→緯度経度の変換は [Zippopotam.us](https://www.zippopotam.us/) を利用しています（APIキー不要・インターネット接続が必要です）。
 
@@ -16,9 +16,9 @@
 
 サンプルプロジェクトを開くと、この「天気予報」拡張で何ができるかを試せます。
 
-▶ [サンプルプロジェクトを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.1)
+▶ [サンプルプロジェクトを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.2)
 
-<iframe src="https://xcratch.github.io/editor/player#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.1" width="540px" height="460px"></iframe>
+<iframe src="https://xcratch.github.io/editor/player#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.2" width="540px" height="460px"></iframe>
 
 ---
 
@@ -28,7 +28,7 @@
 |---|---|
 | `郵便番号 [100-0001] 付近の [1] 時間後の (天気▼)` | 指定した郵便番号付近の、現在からn時間後の予報値を返します |
 | `郵便番号 [100-0001] 付近の [1] 日後の (天気▼)` | 指定した郵便番号付近の、週間予報（最大7日先）の値を返します |
-| `郵便番号 [100-0001] の地名` | その郵便番号が解決された地名（日本語）を返します |
+| `郵便番号 [100-0001] 付近の気象予報地点名` | その郵便番号付近で天気データに使われる地点の名前（日本語）を返します |
 
 > ℹ️ **「付近」の意味（予報地点について）**
 >
@@ -37,7 +37,7 @@
 > 1. 郵便番号 → そのエリアの**代表点1つ**（[Zippopotam.us](https://www.zippopotam.us/) による緯度経度変換）
 > 2. その代表点 → 気象モデルの**最寄り格子点**（[Open-Meteo](https://open-meteo.com/) が数km四方のセルにスナップ）
 >
-> どの地点に解決されたかは `郵便番号 [ZIP] の地名` ブロックで確認できます（日本語表記、例: `東京都千代田区`）。これは郵便番号→緯度経度の変換のあと、[Open-Meteo Geocoding API](https://open-meteo.com/en/docs/geocoding-api) で日本語の地名へ変換したものです。厳密な1点の天気ではない点にご注意ください。
+> どの地点に解決されたかは `郵便番号 [ZIP] 付近の気象予報地点名` ブロックで確認できます（日本語表記、例: `東京都千代田区`）。これは郵便番号→緯度経度の変換のあと、[Open-Meteo Geocoding API](https://open-meteo.com/en/docs/geocoding-api) で最寄りの地名へ変換したものです。郵便番号そのものの地名とは一致しない場合があり、厳密な1点の天気ではない点にもご注意ください。
 
 ### 時間別予報ブロック
 
@@ -109,12 +109,11 @@ WBGT = 0.735×Ta + 0.0374×RH + 0.00292×Ta×RH
 
 プログラムで「熱中症アラート」を出したい場合は、**WBGT が 28 以上（＝「厳重警戒」以上）かどうか**で判定するのがおすすめです。環境省・日本生気象学会の指針でも、WBGT 28℃以上は熱中症の危険が高まり「激しい運動は中止」が推奨される目安とされています。
 
-例（擬似コード）:
+作例はこちらのサンプルプロジェクトで確認できます。
 
-```
-もし ( 郵便番号 [100-0001] 付近の [今] の (WBGT(暑さ指数)) ≥ 28 ) なら
-    「熱中症に警戒！」と言う
-```
+▶ [熱中症アラートのサンプルを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/sample1.sb3?v=1.1.2)
+
+![熱中症アラートのサンプルのブロック](projects/sample1.jpg)
 
 より厳しめにしたい場合は 31 以上（「危険」）で判定します。
 

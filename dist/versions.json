@@ -2,6 +2,11 @@
   "extensionId": "weatherForecast",
   "versions": [
     {
+      "version": "1.1.2",
+      "buildDate": "2026-06-15T23:31:44.515Z",
+      "module": "1.1.2/weatherForecast.mjs"
+    },
+    {
       "version": "1.1.1",
       "buildDate": "2026-06-15T23:01:23.326Z",
       "module": "1.1.1/weatherForecast.mjs"
@@ -27,5 +32,5 @@
       "module": "1.0.0/weatherForecast.mjs"
     }
   ],
-  "latest": "1.1.1"
+  "latest": "1.1.2"
 }
