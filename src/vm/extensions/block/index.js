@@ -388,7 +388,7 @@ class ExtensionBlocks {
                     blockAllThreads: false,
                     text: formatMessage({
                         id: 'weatherForecast.getPlaceName',
-                        default: 'place name of zip [ZIP]',
+                        default: 'weather forecast point name near zip [ZIP]',
                         description: 'get the resolved place name for a postal code'
                     }),
                     func: 'getPlaceName',
