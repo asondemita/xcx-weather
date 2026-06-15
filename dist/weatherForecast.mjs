@@ -724,8 +724,8 @@ var Cast = /*@__PURE__*/getDefaultExportFromCjs(castExports);
 
 var en = {
 	"weatherForecast.name": "Weather Forecast",
-	"weatherForecast.getForecast": "forecast [ITEM] [HOURS] near zip [ZIP]",
-	"weatherForecast.getDailyForecast": "weekly [DAILY_ITEM] [DAY] near zip [ZIP]",
+	"weatherForecast.getForecast": "forecast [ITEM] in [HOURS] hours near zip [ZIP]",
+	"weatherForecast.getDailyForecast": "weekly [DAILY_ITEM] in [DAY] days near zip [ZIP]",
 	"weatherForecast.getPlaceName": "place name of zip [ZIP]",
 	"weatherForecast.item.temperature": "temperature",
 	"weatherForecast.item.precipitation": "precipitation probability",
@@ -744,27 +744,12 @@ var en = {
 	"weatherForecast.wbgt.caution": "caution",
 	"weatherForecast.wbgt.warning": "warning",
 	"weatherForecast.wbgt.severe": "strict caution",
-	"weatherForecast.wbgt.danger": "danger",
-	"weatherForecast.hours.now": "now",
-	"weatherForecast.hours.h1": "in 1 hour",
-	"weatherForecast.hours.h2": "in 2 hours",
-	"weatherForecast.hours.h3": "in 3 hours",
-	"weatherForecast.hours.h6": "in 6 hours",
-	"weatherForecast.hours.h12": "in 12 hours",
-	"weatherForecast.hours.h24": "in 24 hours",
-	"weatherForecast.hours.h48": "in 48 hours",
-	"weatherForecast.day.today": "today",
-	"weatherForecast.day.tomorrow": "tomorrow",
-	"weatherForecast.day.d2": "in 2 days",
-	"weatherForecast.day.d3": "in 3 days",
-	"weatherForecast.day.d4": "in 4 days",
-	"weatherForecast.day.d5": "in 5 days",
-	"weatherForecast.day.d6": "in 6 days"
+	"weatherForecast.wbgt.danger": "danger"
 };
 var ja = {
 	"weatherForecast.name": "天気予報",
-	"weatherForecast.getForecast": "郵便番号 [ZIP] 付近の [HOURS]の [ITEM]",
-	"weatherForecast.getDailyForecast": "郵便番号 [ZIP] 付近の [DAY]の [DAILY_ITEM]",
+	"weatherForecast.getForecast": "郵便番号 [ZIP] 付近の [HOURS] 時間後の [ITEM]",
+	"weatherForecast.getDailyForecast": "郵便番号 [ZIP] 付近の [DAY] 日後の [DAILY_ITEM]",
 	"weatherForecast.getPlaceName": "郵便番号 [ZIP] の地名",
 	"weatherForecast.item.temperature": "気温",
 	"weatherForecast.item.precipitation": "降水確率",
@@ -783,30 +768,15 @@ var ja = {
 	"weatherForecast.wbgt.caution": "注意",
 	"weatherForecast.wbgt.warning": "警戒",
 	"weatherForecast.wbgt.severe": "厳重警戒",
-	"weatherForecast.wbgt.danger": "危険",
-	"weatherForecast.hours.now": "今",
-	"weatherForecast.hours.h1": "1時間後",
-	"weatherForecast.hours.h2": "2時間後",
-	"weatherForecast.hours.h3": "3時間後",
-	"weatherForecast.hours.h6": "6時間後",
-	"weatherForecast.hours.h12": "12時間後",
-	"weatherForecast.hours.h24": "24時間後",
-	"weatherForecast.hours.h48": "48時間後",
-	"weatherForecast.day.today": "今日",
-	"weatherForecast.day.tomorrow": "明日",
-	"weatherForecast.day.d2": "明後日",
-	"weatherForecast.day.d3": "3日後",
-	"weatherForecast.day.d4": "4日後",
-	"weatherForecast.day.d5": "5日後",
-	"weatherForecast.day.d6": "6日後"
+	"weatherForecast.wbgt.danger": "危険"
 };
 var translations = {
 	en: en,
 	ja: ja,
 	"ja-Hira": {
 	"weatherForecast.name": "てんきよほう",
-	"weatherForecast.getForecast": "ゆうびんばんごう [ZIP] ふきんの [HOURS]の [ITEM]",
-	"weatherForecast.getDailyForecast": "ゆうびんばんごう [ZIP] ふきんの [DAY]の [DAILY_ITEM]",
+	"weatherForecast.getForecast": "ゆうびんばんごう [ZIP] ふきんの [HOURS] じかんごの [ITEM]",
+	"weatherForecast.getDailyForecast": "ゆうびんばんごう [ZIP] ふきんの [DAY] にちごの [DAILY_ITEM]",
 	"weatherForecast.getPlaceName": "ゆうびんばんごう [ZIP] のちめい",
 	"weatherForecast.item.temperature": "きおん",
 	"weatherForecast.item.precipitation": "こうすいかくりつ",
@@ -825,22 +795,7 @@ var translations = {
 	"weatherForecast.wbgt.caution": "ちゅうい",
 	"weatherForecast.wbgt.warning": "けいかい",
 	"weatherForecast.wbgt.severe": "げんじゅうけいかい",
-	"weatherForecast.wbgt.danger": "きけん",
-	"weatherForecast.hours.now": "いま",
-	"weatherForecast.hours.h1": "1じかんご",
-	"weatherForecast.hours.h2": "2じかんご",
-	"weatherForecast.hours.h3": "3じかんご",
-	"weatherForecast.hours.h6": "6じかんご",
-	"weatherForecast.hours.h12": "12じかんご",
-	"weatherForecast.hours.h24": "24じかんご",
-	"weatherForecast.hours.h48": "48じかんご",
-	"weatherForecast.day.today": "きょう",
-	"weatherForecast.day.tomorrow": "あした",
-	"weatherForecast.day.d2": "あさって",
-	"weatherForecast.day.d3": "3にちご",
-	"weatherForecast.day.d4": "4にちご",
-	"weatherForecast.day.d5": "5にちご",
-	"weatherForecast.day.d6": "6にちご"
+	"weatherForecast.wbgt.danger": "きけん"
 }
 };
 
@@ -1033,79 +988,37 @@ var windDirectionToJa = function windDirectionToJa(deg) {
 };
 
 /**
- * Selectable "hours ahead" options for the HOURS dropdown.
- * Every value stays within the Open-Meteo forecast window (see FORECAST_DAYS),
- * so the user can never request a time outside the available data.
- * @type {Array.<{value: string, id: string, default: string}>}
+ * Tolerance (ms) for matching a requested hour to an available hourly data
+ * point. The grid is hourly, so any in-window request is within 30 min; a wider
+ * gap means the requested time is outside the forecast window.
+ * @type {number}
  */
-var HOUR_OPTIONS = [{
-  value: '0',
-  id: 'weatherForecast.hours.now',
-  default: 'now'
-}, {
-  value: '1',
-  id: 'weatherForecast.hours.h1',
-  default: 'in 1 hour'
-}, {
-  value: '2',
-  id: 'weatherForecast.hours.h2',
-  default: 'in 2 hours'
-}, {
-  value: '3',
-  id: 'weatherForecast.hours.h3',
-  default: 'in 3 hours'
-}, {
-  value: '6',
-  id: 'weatherForecast.hours.h6',
-  default: 'in 6 hours'
-}, {
-  value: '12',
-  id: 'weatherForecast.hours.h12',
-  default: 'in 12 hours'
-}, {
-  value: '24',
-  id: 'weatherForecast.hours.h24',
-  default: 'in 24 hours'
-}, {
-  value: '48',
-  id: 'weatherForecast.hours.h48',
-  default: 'in 48 hours'
-}];
+var HOUR_MATCH_TOLERANCE_MS = 60 * 60 * 1000;
 
 /**
- * Selectable "day" options for the weekly-forecast DAY dropdown. Index 0 is
- * today; every value stays within the WEEKLY_DAYS window.
- * @type {Array.<{value: string, id: string, default: string}>}
+ * Convert full-width ASCII characters (！-～) and the full-width space to their
+ * half-width equivalents, so free-typed full-width input is accepted.
+ * @param {string} raw - user input
+ * @returns {string} - input with full-width forms converted to half-width
  */
-var DAY_OPTIONS = [{
-  value: '0',
-  id: 'weatherForecast.day.today',
-  default: 'today'
-}, {
-  value: '1',
-  id: 'weatherForecast.day.tomorrow',
-  default: 'tomorrow'
-}, {
-  value: '2',
-  id: 'weatherForecast.day.d2',
-  default: 'in 2 days'
-}, {
-  value: '3',
-  id: 'weatherForecast.day.d3',
-  default: 'in 3 days'
-}, {
-  value: '4',
-  id: 'weatherForecast.day.d4',
-  default: 'in 4 days'
-}, {
-  value: '5',
-  id: 'weatherForecast.day.d5',
-  default: 'in 5 days'
-}, {
-  value: '6',
-  id: 'weatherForecast.day.d6',
-  default: 'in 6 days'
-}];
+var toHalfWidth = function toHalfWidth(raw) {
+  return String(raw).replace(/[！-～]/g, function (c) {
+    return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
+  }).replace(/　/g, ' ');
+};
+
+/**
+ * Parse a freely-typed number, accepting half-width or full-width digits/signs
+ * (e.g. "3", "１２", "－2").
+ * @param {string} raw - user input
+ * @returns {number} - parsed number, or NaN when it is not numeric
+ */
+var parseLooseNumber = function parseLooseNumber(raw) {
+  var text = toHalfWidth(raw).trim();
+  if (text === '') return NaN;
+  var value = Number(text);
+  return Number.isFinite(value) ? value : NaN;
+};
 
 /**
  * Normalize a Japanese postal code into the "NNN-NNNN" form expected by the API.
@@ -1115,11 +1028,7 @@ var DAY_OPTIONS = [{
  * @returns {?string} - normalized code, or null when it is not 7 digits
  */
 var normalizeZip = function normalizeZip(raw) {
-  // Convert full-width digits (０-９) to half-width before stripping separators.
-  var halfWidth = String(raw).replace(/[０-９]/g, function (c) {
-    return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
-  });
-  var digits = halfWidth.replace(/[^0-9]/g, '');
+  var digits = toHalfWidth(raw).replace(/[^0-9]/g, '');
   if (digits.length !== 7) return null;
   return "".concat(digits.slice(0, 3), "-").concat(digits.slice(3));
 };
@@ -1188,7 +1097,7 @@ var ExtensionBlocks = /*#__PURE__*/function () {
           blockAllThreads: false,
           text: formatMessage({
             id: 'weatherForecast.getForecast',
-            default: 'forecast [ITEM] [HOURS] near zip [ZIP]',
+            default: 'forecast [ITEM] in [HOURS] hours near zip [ZIP]',
             description: 'get a weather forecast value'
           }),
           func: 'getForecast',
@@ -1199,9 +1108,8 @@ var ExtensionBlocks = /*#__PURE__*/function () {
               defaultValue: 'weather'
             },
             HOURS: {
-              type: ArgumentType.STRING,
-              menu: 'hoursMenu',
-              defaultValue: '1'
+              type: ArgumentType.NUMBER,
+              defaultValue: 1
             },
             ZIP: {
               type: ArgumentType.STRING,
@@ -1214,7 +1122,7 @@ var ExtensionBlocks = /*#__PURE__*/function () {
           blockAllThreads: false,
           text: formatMessage({
             id: 'weatherForecast.getDailyForecast',
-            default: 'weekly [DAILY_ITEM] [DAY] near zip [ZIP]',
+            default: 'weekly [DAILY_ITEM] in [DAY] days near zip [ZIP]',
             description: 'get a daily (weekly) weather forecast value'
           }),
           func: 'getDailyForecast',
@@ -1225,9 +1133,8 @@ var ExtensionBlocks = /*#__PURE__*/function () {
               defaultValue: 'weather'
             },
             DAY: {
-              type: ArgumentType.STRING,
-              menu: 'dayMenu',
-              defaultValue: '1'
+              type: ArgumentType.NUMBER,
+              defaultValue: 1
             },
             ZIP: {
               type: ArgumentType.STRING,
@@ -1305,19 +1212,6 @@ var ExtensionBlocks = /*#__PURE__*/function () {
               value: 'wbgtLevel'
             }]
           },
-          hoursMenu: {
-            acceptReporters: false,
-            items: HOUR_OPTIONS.map(function (option) {
-              return {
-                text: formatMessage({
-                  id: option.id,
-                  default: option.default,
-                  description: 'hours-ahead menu item'
-                }),
-                value: option.value
-              };
-            })
-          },
           dailyItemMenu: {
             acceptReporters: true,
             items: [{
@@ -1363,19 +1257,6 @@ var ExtensionBlocks = /*#__PURE__*/function () {
               }),
               value: 'sunset'
             }]
-          },
-          dayMenu: {
-            acceptReporters: false,
-            items: DAY_OPTIONS.map(function (option) {
-              return {
-                text: formatMessage({
-                  id: option.id,
-                  default: option.default,
-                  description: 'day-ahead menu item'
-                }),
-                value: option.value
-              };
-            })
           }
         }
       };
@@ -1541,7 +1422,8 @@ var ExtensionBlocks = /*#__PURE__*/function () {
      * browser's local timezone.
      * @param {object} forecast - Open-Meteo response
      * @param {number} hours - hours ahead of the current time
-     * @returns {number} - index into the hourly arrays
+     * @returns {{index: number, diffMs: number}} - nearest index and how far
+     *     (ms) that data point is from the requested time
      */
   }, {
     key: "_indexForHoursAhead",
@@ -1560,14 +1442,17 @@ var ExtensionBlocks = /*#__PURE__*/function () {
           bestIndex = i;
         }
       }
-      return bestIndex;
+      return {
+        index: bestIndex,
+        diffMs: bestDiff
+      };
     }
 
     /**
      * Report a forecast value for a postal code at a given hour offset.
      * @param {object} args - block arguments
      * @param {string} args.ITEM - one of temperature/precipitation/weather/windspeed
-     * @param {string} args.HOURS - hours ahead of now (selected from HOUR_OPTIONS)
+     * @param {string} args.HOURS - hours ahead of now (free input, full-width ok)
      * @param {string} args.ZIP - Japanese postal code
      * @returns {Promise<(string|number)>} - the requested value, or '' on failure
      */
@@ -1576,14 +1461,18 @@ var ExtensionBlocks = /*#__PURE__*/function () {
     value: function getForecast(args) {
       var _this = this;
       var item = Cast.toString(args.ITEM);
-      var hours = Cast.toNumber(args.HOURS);
+      var hours = parseLooseNumber(args.HOURS);
       var zip = normalizeZip(args.ZIP);
-      if (!zip) return Promise.resolve('');
+      // Reject non-numeric or past times; out-of-window times are caught below.
+      if (!zip || Number.isNaN(hours) || hours < 0) return Promise.resolve('');
       return this._lookupLocation(zip).then(function (location) {
         if (!location) return '';
         return _this._fetchForecast(location).then(function (forecast) {
           if (!forecast || !forecast.hourly || !forecast.hourly.time) return '';
-          var i = _this._indexForHoursAhead(forecast, hours);
+          var match = _this._indexForHoursAhead(forecast, hours);
+          // Outside the available forecast window -> no misleading value.
+          if (match.diffMs > HOUR_MATCH_TOLERANCE_MS) return '';
+          var i = match.index;
           var hourly = forecast.hourly;
           switch (item) {
             case 'temperature':
@@ -1646,7 +1535,7 @@ var ExtensionBlocks = /*#__PURE__*/function () {
      * Report a daily (weekly) forecast value for a postal code on a given day.
      * @param {object} args - block arguments
      * @param {string} args.DAILY_ITEM - one of weather/tempMax/tempMin/precipitation
-     * @param {string} args.DAY - days ahead of today (0 = today, selected from DAY_OPTIONS)
+     * @param {string} args.DAY - days ahead of today (0 = today, free input, full-width ok)
      * @param {string} args.ZIP - Japanese postal code
      * @returns {Promise<(string|number)>} - the requested value, or '' on failure
      */
@@ -1655,9 +1544,10 @@ var ExtensionBlocks = /*#__PURE__*/function () {
     value: function getDailyForecast(args) {
       var _this2 = this;
       var item = Cast.toString(args.DAILY_ITEM);
-      var day = Math.round(Cast.toNumber(args.DAY));
+      var dayValue = parseLooseNumber(args.DAY);
+      var day = Math.round(dayValue);
       var zip = normalizeZip(args.ZIP);
-      if (!zip) return Promise.resolve('');
+      if (!zip || Number.isNaN(dayValue)) return Promise.resolve('');
       return this._lookupLocation(zip).then(function (location) {
         if (!location) return '';
         return _this2._fetchDailyForecast(location).then(function (forecast) {
@@ -1778,5 +1668,5 @@ var ExtensionBlocks = /*#__PURE__*/function () {
   }]);
 }();
 
-export { ExtensionBlocks as blockClass, computeWbgt, entry, normalizeZip, wbgtLevel, weatherCodeToJa, windDirectionToJa };
+export { ExtensionBlocks as blockClass, computeWbgt, entry, normalizeZip, parseLooseNumber, wbgtLevel, weatherCodeToJa, windDirectionToJa };
 //# sourceMappingURL=weatherForecast.mjs.map

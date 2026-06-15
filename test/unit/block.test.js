@@ -2,6 +2,7 @@ import {
     blockClass,
     weatherCodeToJa,
     normalizeZip,
+    parseLooseNumber,
     computeWbgt,
     wbgtLevel,
     windDirectionToJa
@@ -52,6 +53,22 @@ describe("normalizeZip", () => {
         expect(normalizeZip("123")).toBe(null);
         expect(normalizeZip("")).toBe(null);
         expect(normalizeZip("12345678")).toBe(null);
+    });
+});
+
+describe("parseLooseNumber", () => {
+    test("parses half-width and full-width digits", () => {
+        expect(parseLooseNumber("3")).toBe(3);
+        expect(parseLooseNumber(12)).toBe(12);
+        expect(parseLooseNumber("１２")).toBe(12); // full-width
+        expect(parseLooseNumber("－2")).toBe(-2); // full-width minus
+        expect(parseLooseNumber(" 5 ")).toBe(5);
+    });
+
+    test("returns NaN for non-numeric or empty input", () => {
+        expect(Number.isNaN(parseLooseNumber("abc"))).toBe(true);
+        expect(Number.isNaN(parseLooseNumber(""))).toBe(true);
+        expect(Number.isNaN(parseLooseNumber("   "))).toBe(true);
     });
 });
 
@@ -142,13 +159,35 @@ describe("getForecast", () => {
         expect(result).toBe("caution"); // ~22.2 -> 21..25 band
     });
 
-    test("requests enough forecast days to cover the longest menu option", async () => {
+    test("requests several forecast days of hourly data", async () => {
         const block = new blockClass(runtime);
         await block.getForecast({ITEM: "temperature", HOURS: "1", ZIP: "100-0001"});
         const forecastCall = global.fetch.mock.calls
             .map(call => call[0])
             .find(url => url.startsWith("https://api.open-meteo.com/"));
         expect(forecastCall).toContain("forecast_days=4");
+    });
+
+    test("accepts free-typed full-width hours", async () => {
+        const block = new blockClass(runtime);
+        // "２" (full-width) -> 2 -> index 2 -> temperature 22
+        const result = await block.getForecast({ITEM: "temperature", HOURS: "２", ZIP: "100-0001"});
+        expect(result).toBe(22);
+    });
+
+    test("returns '' for hours outside the forecast window", async () => {
+        const block = new blockClass(runtime);
+        // only 3 hours of data exist; 50h ahead is far outside -> no value
+        const result = await block.getForecast({ITEM: "temperature", HOURS: 50, ZIP: "100-0001"});
+        expect(result).toBe("");
+    });
+
+    test("returns '' for non-numeric or negative hours", async () => {
+        const block = new blockClass(runtime);
+        expect(await block.getForecast({ITEM: "temperature", HOURS: "abc", ZIP: "100-0001"}))
+            .toBe("");
+        expect(await block.getForecast({ITEM: "temperature", HOURS: -3, ZIP: "100-0001"}))
+            .toBe("");
     });
 });
 
@@ -261,6 +300,19 @@ describe("getDailyForecast", () => {
         expect(result).toBe("");
     });
 
+    test("accepts free-typed full-width day", async () => {
+        const block = new blockClass(runtime);
+        // "２" (full-width) -> day index 2 -> weather_code 63 -> 雨
+        const result = await block.getDailyForecast({DAILY_ITEM: "weather", DAY: "２", ZIP: "100-0001"});
+        expect(result).toBe("雨");
+    });
+
+    test("returns '' for non-numeric day", async () => {
+        const block = new blockClass(runtime);
+        const result = await block.getDailyForecast({DAILY_ITEM: "weather", DAY: "abc", ZIP: "100-0001"});
+        expect(result).toBe("");
+    });
+
     test("returns '' for invalid postal code", async () => {
         const block = new blockClass(runtime);
         const result = await block.getDailyForecast({DAILY_ITEM: "weather", DAY: 1, ZIP: "abc"});
@@ -368,17 +420,28 @@ describe("windDirectionToJa", () => {
     });
 });
 
-describe("getInfo hoursMenu", () => {
+describe("getInfo", () => {
     const formatMessage = msg => msg.default;
     formatMessage.setup = () => null; // skip translation merge in setupTranslations
     const runtime = {formatMessage};
 
-    test("offers a fixed, reporter-free dropdown of in-range hours", () => {
+    test("uses free numeric input with defaults of 1 for hours and day", () => {
         const block = new blockClass(runtime);
-        const hoursMenu = block.getInfo().menus.hoursMenu;
-        expect(hoursMenu.acceptReporters).toBe(false);
-        const values = hoursMenu.items.map(item => item.value);
-        expect(values).toEqual(["0", "1", "2", "3", "6", "12", "24", "48"]);
+        const blocks = block.getInfo().blocks;
+        const forecast = blocks.find(b => b.opcode === "getForecast");
+        const daily = blocks.find(b => b.opcode === "getDailyForecast");
+        // free input -> NUMBER type, no menu
+        expect(forecast.arguments.HOURS.menu).toBeUndefined();
+        expect(forecast.arguments.HOURS.defaultValue).toBe(1);
+        expect(daily.arguments.DAY.menu).toBeUndefined();
+        expect(daily.arguments.DAY.defaultValue).toBe(1);
+    });
+
+    test("no longer defines the hours/day dropdown menus", () => {
+        const block = new blockClass(runtime);
+        const menus = block.getInfo().menus;
+        expect(menus.hoursMenu).toBeUndefined();
+        expect(menus.dayMenu).toBeUndefined();
     });
 
     test("defaults the hourly item selector to weather", () => {
@@ -402,14 +465,6 @@ describe("getInfo hoursMenu", () => {
         expect(values).toEqual([
             "weather", "tempMax", "tempMin", "precipitation", "sunrise", "sunset"
         ]);
-    });
-
-    test("offers a fixed, reporter-free dropdown of weekly days", () => {
-        const block = new blockClass(runtime);
-        const dayMenu = block.getInfo().menus.dayMenu;
-        expect(dayMenu.acceptReporters).toBe(false);
-        const values = dayMenu.items.map(item => item.value);
-        expect(values).toEqual(["0", "1", "2", "3", "4", "5", "6"]);
     });
 
     test("exposes the hourly, weekly and place-name blocks", () => {

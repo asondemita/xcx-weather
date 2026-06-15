@@ -186,36 +186,35 @@ const windDirectionToJa = deg => {
 };
 
 /**
- * Selectable "hours ahead" options for the HOURS dropdown.
- * Every value stays within the Open-Meteo forecast window (see FORECAST_DAYS),
- * so the user can never request a time outside the available data.
- * @type {Array.<{value: string, id: string, default: string}>}
+ * Tolerance (ms) for matching a requested hour to an available hourly data
+ * point. The grid is hourly, so any in-window request is within 30 min; a wider
+ * gap means the requested time is outside the forecast window.
+ * @type {number}
  */
-const HOUR_OPTIONS = [
-    {value: '0', id: 'weatherForecast.hours.now', default: 'now'},
-    {value: '1', id: 'weatherForecast.hours.h1', default: 'in 1 hour'},
-    {value: '2', id: 'weatherForecast.hours.h2', default: 'in 2 hours'},
-    {value: '3', id: 'weatherForecast.hours.h3', default: 'in 3 hours'},
-    {value: '6', id: 'weatherForecast.hours.h6', default: 'in 6 hours'},
-    {value: '12', id: 'weatherForecast.hours.h12', default: 'in 12 hours'},
-    {value: '24', id: 'weatherForecast.hours.h24', default: 'in 24 hours'},
-    {value: '48', id: 'weatherForecast.hours.h48', default: 'in 48 hours'}
-];
+const HOUR_MATCH_TOLERANCE_MS = 60 * 60 * 1000;
 
 /**
- * Selectable "day" options for the weekly-forecast DAY dropdown. Index 0 is
- * today; every value stays within the WEEKLY_DAYS window.
- * @type {Array.<{value: string, id: string, default: string}>}
+ * Convert full-width ASCII characters (！-～) and the full-width space to their
+ * half-width equivalents, so free-typed full-width input is accepted.
+ * @param {string} raw - user input
+ * @returns {string} - input with full-width forms converted to half-width
  */
-const DAY_OPTIONS = [
-    {value: '0', id: 'weatherForecast.day.today', default: 'today'},
-    {value: '1', id: 'weatherForecast.day.tomorrow', default: 'tomorrow'},
-    {value: '2', id: 'weatherForecast.day.d2', default: 'in 2 days'},
-    {value: '3', id: 'weatherForecast.day.d3', default: 'in 3 days'},
-    {value: '4', id: 'weatherForecast.day.d4', default: 'in 4 days'},
-    {value: '5', id: 'weatherForecast.day.d5', default: 'in 5 days'},
-    {value: '6', id: 'weatherForecast.day.d6', default: 'in 6 days'}
-];
+const toHalfWidth = raw => String(raw)
+    .replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/　/g, ' ');
+
+/**
+ * Parse a freely-typed number, accepting half-width or full-width digits/signs
+ * (e.g. "3", "１２", "－2").
+ * @param {string} raw - user input
+ * @returns {number} - parsed number, or NaN when it is not numeric
+ */
+const parseLooseNumber = raw => {
+    const text = toHalfWidth(raw).trim();
+    if (text === '') return NaN;
+    const value = Number(text);
+    return Number.isFinite(value) ? value : NaN;
+};
 
 /**
  * Normalize a Japanese postal code into the "NNN-NNNN" form expected by the API.
@@ -225,12 +224,7 @@ const DAY_OPTIONS = [
  * @returns {?string} - normalized code, or null when it is not 7 digits
  */
 const normalizeZip = raw => {
-    // Convert full-width digits (０-９) to half-width before stripping separators.
-    const halfWidth = String(raw).replace(
-        /[０-９]/g,
-        c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)
-    );
-    const digits = halfWidth.replace(/[^0-9]/g, '');
+    const digits = toHalfWidth(raw).replace(/[^0-9]/g, '');
     if (digits.length !== 7) return null;
     return `${digits.slice(0, 3)}-${digits.slice(3)}`;
 };
@@ -342,7 +336,7 @@ class ExtensionBlocks {
                     blockAllThreads: false,
                     text: formatMessage({
                         id: 'weatherForecast.getForecast',
-                        default: 'forecast [ITEM] [HOURS] near zip [ZIP]',
+                        default: 'forecast [ITEM] in [HOURS] hours near zip [ZIP]',
                         description: 'get a weather forecast value'
                     }),
                     func: 'getForecast',
@@ -353,9 +347,8 @@ class ExtensionBlocks {
                             defaultValue: 'weather'
                         },
                         HOURS: {
-                            type: ArgumentType.STRING,
-                            menu: 'hoursMenu',
-                            defaultValue: '1'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 1
                         },
                         ZIP: {
                             type: ArgumentType.STRING,
@@ -369,7 +362,7 @@ class ExtensionBlocks {
                     blockAllThreads: false,
                     text: formatMessage({
                         id: 'weatherForecast.getDailyForecast',
-                        default: 'weekly [DAILY_ITEM] [DAY] near zip [ZIP]',
+                        default: 'weekly [DAILY_ITEM] in [DAY] days near zip [ZIP]',
                         description: 'get a daily (weekly) weather forecast value'
                     }),
                     func: 'getDailyForecast',
@@ -380,9 +373,8 @@ class ExtensionBlocks {
                             defaultValue: 'weather'
                         },
                         DAY: {
-                            type: ArgumentType.STRING,
-                            menu: 'dayMenu',
-                            defaultValue: '1'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 1
                         },
                         ZIP: {
                             type: ArgumentType.STRING,
@@ -470,17 +462,6 @@ class ExtensionBlocks {
                         }
                     ]
                 },
-                hoursMenu: {
-                    acceptReporters: false,
-                    items: HOUR_OPTIONS.map(option => ({
-                        text: formatMessage({
-                            id: option.id,
-                            default: option.default,
-                            description: 'hours-ahead menu item'
-                        }),
-                        value: option.value
-                    }))
-                },
                 dailyItemMenu: {
                     acceptReporters: true,
                     items: [
@@ -533,17 +514,6 @@ class ExtensionBlocks {
                             value: 'sunset'
                         }
                     ]
-                },
-                dayMenu: {
-                    acceptReporters: false,
-                    items: DAY_OPTIONS.map(option => ({
-                        text: formatMessage({
-                            id: option.id,
-                            default: option.default,
-                            description: 'day-ahead menu item'
-                        }),
-                        value: option.value
-                    }))
                 }
             }
         };
@@ -689,7 +659,8 @@ class ExtensionBlocks {
      * browser's local timezone.
      * @param {object} forecast - Open-Meteo response
      * @param {number} hours - hours ahead of the current time
-     * @returns {number} - index into the hourly arrays
+     * @returns {{index: number, diffMs: number}} - nearest index and how far
+     *     (ms) that data point is from the requested time
      */
     _indexForHoursAhead (forecast, hours) {
         const times = forecast.hourly.time;
@@ -706,29 +677,33 @@ class ExtensionBlocks {
                 bestIndex = i;
             }
         }
-        return bestIndex;
+        return {index: bestIndex, diffMs: bestDiff};
     }
 
     /**
      * Report a forecast value for a postal code at a given hour offset.
      * @param {object} args - block arguments
      * @param {string} args.ITEM - one of temperature/precipitation/weather/windspeed
-     * @param {string} args.HOURS - hours ahead of now (selected from HOUR_OPTIONS)
+     * @param {string} args.HOURS - hours ahead of now (free input, full-width ok)
      * @param {string} args.ZIP - Japanese postal code
      * @returns {Promise<(string|number)>} - the requested value, or '' on failure
      */
     getForecast (args) {
         const item = Cast.toString(args.ITEM);
-        const hours = Cast.toNumber(args.HOURS);
+        const hours = parseLooseNumber(args.HOURS);
         const zip = normalizeZip(args.ZIP);
-        if (!zip) return Promise.resolve('');
+        // Reject non-numeric or past times; out-of-window times are caught below.
+        if (!zip || Number.isNaN(hours) || hours < 0) return Promise.resolve('');
 
         return this._lookupLocation(zip)
             .then(location => {
                 if (!location) return '';
                 return this._fetchForecast(location).then(forecast => {
                     if (!forecast || !forecast.hourly || !forecast.hourly.time) return '';
-                    const i = this._indexForHoursAhead(forecast, hours);
+                    const match = this._indexForHoursAhead(forecast, hours);
+                    // Outside the available forecast window -> no misleading value.
+                    if (match.diffMs > HOUR_MATCH_TOLERANCE_MS) return '';
+                    const i = match.index;
                     const hourly = forecast.hourly;
                     switch (item) {
                     case 'temperature': {
@@ -785,15 +760,16 @@ class ExtensionBlocks {
      * Report a daily (weekly) forecast value for a postal code on a given day.
      * @param {object} args - block arguments
      * @param {string} args.DAILY_ITEM - one of weather/tempMax/tempMin/precipitation
-     * @param {string} args.DAY - days ahead of today (0 = today, selected from DAY_OPTIONS)
+     * @param {string} args.DAY - days ahead of today (0 = today, free input, full-width ok)
      * @param {string} args.ZIP - Japanese postal code
      * @returns {Promise<(string|number)>} - the requested value, or '' on failure
      */
     getDailyForecast (args) {
         const item = Cast.toString(args.DAILY_ITEM);
-        const day = Math.round(Cast.toNumber(args.DAY));
+        const dayValue = parseLooseNumber(args.DAY);
+        const day = Math.round(dayValue);
         const zip = normalizeZip(args.ZIP);
-        if (!zip) return Promise.resolve('');
+        if (!zip || Number.isNaN(dayValue)) return Promise.resolve('');
 
         return this._lookupLocation(zip)
             .then(location => {
@@ -858,6 +834,7 @@ export {
     ExtensionBlocks as blockClass,
     weatherCodeToJa,
     normalizeZip,
+    parseLooseNumber,
     computeWbgt,
     wbgtLevel,
     windDirectionToJa
