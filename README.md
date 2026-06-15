@@ -16,9 +16,9 @@
 
 サンプルプロジェクトを開くと、この「天気予報」拡張で何ができるかを試せます。
 
-▶ [サンプルプロジェクトを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.0)
+▶ [サンプルプロジェクトを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.1)
 
-<iframe src="https://xcratch.github.io/editor/player#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.0" width="540px" height="460px"></iframe>
+<iframe src="https://xcratch.github.io/editor/player#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.1" width="540px" height="460px"></iframe>
 
 ---
 
