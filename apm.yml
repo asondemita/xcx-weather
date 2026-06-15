@@ -1,0 +1,9 @@
+name: xcx-weather
+version: 1.0.0
+description: APM project for xcx-weather
+dependencies:
+  apm:
+  - xcratch/xcratch-skills
+  mcp: []
+includes: auto
+scripts: {}

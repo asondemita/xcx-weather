@@ -1,0 +1,14 @@
+{
+  "en": {
+    "weatherForecast.entry.name": "Weather Forecast",
+    "weatherForecast.entry.description": "Get a weather forecast (temperature, precipitation, weather, wind) by Japanese postal code using Open-Meteo."
+  },
+  "ja": {
+    "weatherForecast.entry.name": "天気予報",
+    "weatherForecast.entry.description": "郵便番号からn時間後の気温・降水確率・天気・風速を取得します（Open-Meteo を使用）。"
+  },
+  "ja-Hira": {
+    "weatherForecast.entry.name": "てんきよほう",
+    "weatherForecast.entry.description": "ゆうびんばんごうから nじかんごの きおん・こうすいかくりつ・てんき・ふうそくを とりだします。"
+  }
+}
