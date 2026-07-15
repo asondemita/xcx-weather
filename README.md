@@ -16,9 +16,9 @@
 
 サンプルプロジェクトを開くと、この「天気予報」拡張で何ができるかを試せます。
 
-▶ [サンプルプロジェクトを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.3)
+▶ [サンプルプロジェクトを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.4)
 
-<iframe src="https://xcratch.github.io/editor/player#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.3" width="540px" height="460px"></iframe>
+<iframe src="https://xcratch.github.io/editor/player#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.4" width="540px" height="460px"></iframe>
 
 ---
 
@@ -26,8 +26,8 @@
 
 | ブロック | 説明 |
 |---|---|
-| `郵便番号 [100-0001] 付近の [1] 時間後の (天気▼)` | 指定した郵便番号付近の、現在からn時間後の予報値を返します |
-| `郵便番号 [100-0001] 付近の [1] 日後の (天気▼)` | 指定した郵便番号付近の、週間予報（最大7日先）の値を返します |
+| `郵便番号 [100-0001] 付近の [0] 時間後の (天気▼)` | 指定した郵便番号付近の、現在からn時間後の予報値を返します |
+| `郵便番号 [100-0001] 付近の [0] 日後の (天気▼)` | 指定した郵便番号付近の、週間予報（最大7日先）の値を返します |
 | `郵便番号 [100-0001] 付近の気象予報地点名` | その郵便番号付近で天気データに使われる地点の名前（日本語）を返します |
 
 > ℹ️ **「付近」の意味（予報地点について）**
@@ -41,7 +41,7 @@
 
 ### 時間別予報ブロック
 
-`郵便番号 [ZIP] 付近の [n] 時間後の [項目▼]` は、現在からn時間後の予報値を返します。「n」は数字を直接入力します（デフォルト 1）。
+`郵便番号 [ZIP] 付近の [n] 時間後の [項目▼]` は、現在からn時間後の予報値を返します。「n」は数字を直接入力します（デフォルト 0＝現在に最も近い毎正時）。
 
 選べる項目（表示順）:
 
@@ -63,7 +63,7 @@
 
 `郵便番号 [ZIP] 付近の [n] 日後の [項目▼]` は、日単位（週間）の予報値を返します。
 
-- **日** … **0以上の数字を直接入力**します（**半角・全角どちらでも可**。デフォルト 1。0=今日 / 1=明日 / … 最大6＝6日後）。範囲外や数字以外は空の値を返します。
+- **日** … **0以上の数字を直接入力**します（**半角・全角どちらでも可**。デフォルト 0。0=今日 / 1=明日 / … 最大6＝6日後）。範囲外や数字以外は空の値を返します。
 - **項目** … 次から選択
 
 | 項目 | 内容 |
@@ -111,7 +111,7 @@ WBGT = 0.735×Ta + 0.0374×RH + 0.00292×Ta×RH
 
 作例はこちらのサンプルプロジェクトで確認できます。
 
-▶ [熱中症アラートのサンプルを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/sample1.sb3?v=1.1.3)
+▶ [熱中症アラートのサンプルを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/sample1.sb3?v=1.1.4)
 
 ![熱中症アラートのサンプルのブロック](projects/sample1.jpg)
 

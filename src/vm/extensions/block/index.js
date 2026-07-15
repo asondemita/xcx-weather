@@ -339,7 +339,7 @@ class ExtensionBlocks {
                         },
                         HOURS: {
                             type: ArgumentType.NUMBER,
-                            defaultValue: 1
+                            defaultValue: 0
                         },
                         ZIP: {
                             type: ArgumentType.STRING,
@@ -365,7 +365,7 @@ class ExtensionBlocks {
                         },
                         DAY: {
                             type: ArgumentType.NUMBER,
-                            defaultValue: 1
+                            defaultValue: 0
                         },
                         ZIP: {
                             type: ArgumentType.STRING,

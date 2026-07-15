@@ -420,16 +420,16 @@ describe("getInfo", () => {
     formatMessage.setup = () => null; // skip translation merge in setupTranslations
     const runtime = {formatMessage};
 
-    test("uses free numeric input with defaults of 1 for hours and day", () => {
+    test("uses free numeric input with defaults of 0 for hours and day", () => {
         const block = new blockClass(runtime);
         const blocks = block.getInfo().blocks;
         const forecast = blocks.find(b => b.opcode === "getForecast");
         const daily = blocks.find(b => b.opcode === "getDailyForecast");
         // free input -> NUMBER type, no menu
         expect(forecast.arguments.HOURS.menu).toBeUndefined();
-        expect(forecast.arguments.HOURS.defaultValue).toBe(1);
+        expect(forecast.arguments.HOURS.defaultValue).toBe(0);
         expect(daily.arguments.DAY.menu).toBeUndefined();
-        expect(daily.arguments.DAY.defaultValue).toBe(1);
+        expect(daily.arguments.DAY.defaultValue).toBe(0);
     });
 
     test("no longer defines the hours/day dropdown menus", () => {
