@@ -8,7 +8,7 @@
 - **週間予報**（最大7日先）… 天気・最高気温・最低気温・降水確率・日の出・日の入り
 - **気象予報地点名** … 郵便番号付近で天気データに使われる地点の名前（日本語）
 
-天気データは無料の [Open-Meteo](https://open-meteo.com/) API、郵便番号→緯度経度の変換は [Zippopotam.us](https://www.zippopotam.us/) を利用しています（APIキー不要・インターネット接続が必要です）。
+天気データは無料の [Open-Meteo](https://open-meteo.com/) API、郵便番号→緯度経度の変換は [HeartRails Geo API](https://geoapi.heartrails.com/) を利用しています（APIキー不要・インターネット接続が必要です）。
 
 ---
 
@@ -16,9 +16,9 @@
 
 サンプルプロジェクトを開くと、この「天気予報」拡張で何ができるかを試せます。
 
-▶ [サンプルプロジェクトを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.2)
+▶ [サンプルプロジェクトを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.3)
 
-<iframe src="https://xcratch.github.io/editor/player#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.2" width="540px" height="460px"></iframe>
+<iframe src="https://xcratch.github.io/editor/player#https://asondemita.github.io/xcx-weather/projects/example.sb3?v=1.1.3" width="540px" height="460px"></iframe>
 
 ---
 
@@ -34,10 +34,10 @@
 >
 > このブロックが返すのは「郵便番号ピンポイントの天気」ではなく、「**その郵便番号付近（数km四方のエリア）の予報**」です。内部では次の2段階の近似が入ります。
 >
-> 1. 郵便番号 → そのエリアの**代表点1つ**（[Zippopotam.us](https://www.zippopotam.us/) による緯度経度変換）
+> 1. 郵便番号 → そのエリアの**代表点1つ**（[HeartRails Geo API](https://geoapi.heartrails.com/) による緯度経度変換）
 > 2. その代表点 → 気象モデルの**最寄り格子点**（[Open-Meteo](https://open-meteo.com/) が数km四方のセルにスナップ）
 >
-> どの地点に解決されたかは `郵便番号 [ZIP] 付近の気象予報地点名` ブロックで確認できます（日本語表記、例: `東京都千代田区`）。これは郵便番号→緯度経度の変換のあと、[Open-Meteo Geocoding API](https://open-meteo.com/en/docs/geocoding-api) で最寄りの地名へ変換したものです。郵便番号そのものの地名とは一致しない場合があり、厳密な1点の天気ではない点にもご注意ください。
+> どの地点に解決されたかは `郵便番号 [ZIP] 付近の気象予報地点名` ブロックで確認できます（日本語表記、例: `東京都千代田区`）。厳密な1点の天気ではない点にご注意ください。
 
 ### 時間別予報ブロック
 
@@ -111,7 +111,7 @@ WBGT = 0.735×Ta + 0.0374×RH + 0.00292×Ta×RH
 
 作例はこちらのサンプルプロジェクトで確認できます。
 
-▶ [熱中症アラートのサンプルを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/sample1.sb3?v=1.1.2)
+▶ [熱中症アラートのサンプルを開く](https://xcratch.github.io/editor/#https://asondemita.github.io/xcx-weather/projects/sample1.sb3?v=1.1.3)
 
 ![熱中症アラートのサンプルのブロック](projects/sample1.jpg)
 
@@ -268,8 +268,8 @@ GitHub の Actions タブから手動でデプロイをトリガーすること�
 
 ### 利用データと帰属表示
 
-- **天気・ジオコーディング**: [Open-Meteo](https://open-meteo.com/) — データは [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) で提供されています。
-- **郵便番号→緯度経度**: [Zippopotam.us](https://www.zippopotam.us/) — データ元は [GeoNames](https://www.geonames.org/)（[CC-BY](https://creativecommons.org/licenses/by/4.0/)）。
+- **天気データ**: [Open-Meteo](https://open-meteo.com/) — データは [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) で提供されています。
+- **郵便番号→緯度経度・地名**: [HeartRails Geo API](https://geoapi.heartrails.com/) — 「位置参照情報」（国土交通省）等をもとに HeartRails が提供する無料の地理情報APIです。
 - **WBGT（暑さ指数）の計算式**: 小野ら（2014）の屋外WBGT推定回帰式（環境省採用）。
 
 ### 利用上の注意

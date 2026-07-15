@@ -36,21 +36,18 @@ let extensionURL = 'https://asondemita.github.io/xcx-weather/dist/weatherForecas
 
 /**
  * Endpoint to convert a Japanese postal code into latitude/longitude.
+ * HeartRails Geo API covers all Japanese postal codes (including ones
+ * starting with 0, which Zippopotam.us lacks) and returns Japanese
+ * place names directly. Expects a 7-digit code without a hyphen.
  * @type {string}
  */
-const ZIP_API = 'https://api.zippopotam.us/jp/';
+const ZIP_API = 'https://geoapi.heartrails.com/api/json?method=searchByPostal&postal=';
 
 /**
  * Endpoint for the Open-Meteo hourly forecast.
  * @type {string}
  */
 const FORECAST_API = 'https://api.open-meteo.com/v1/forecast';
-
-/**
- * Endpoint for the Open-Meteo geocoding search (used to localize place names).
- * @type {string}
- */
-const GEOCODE_API = 'https://geocoding-api.open-meteo.com/v1/search';
 
 /**
  * Time-to-live (ms) for the cached forecast of a location.
@@ -310,12 +307,6 @@ class ExtensionBlocks {
          * @type {Object.<string, {fetchedAt: number, data: Promise<?object>}>}
          */
         this._dailyCache = {};
-
-        /**
-         * Cache of coordinates -> Promise<string> Japanese place name lookups.
-         * @type {Object.<string, Promise<string>>}
-         */
-        this._nameCache = {};
     }
 
     /**
@@ -526,21 +517,20 @@ class ExtensionBlocks {
      */
     _lookupLocation (zip) {
         if (this._geoCache[zip]) return this._geoCache[zip];
-        const request = fetch(`${ZIP_API}${zip}`)
+        const request = fetch(`${ZIP_API}${zip.replace('-', '')}`)
             .then(res => (res.ok ? res.json() : null))
             .then(json => {
-                if (!json || !json.places || json.places.length === 0) return null;
-                const place = json.places[0];
-                // Zippopotam returns Japanese names in romaji (e.g. "Chiyoda", "Toukyouto").
-                const placeName = place['place name'] || '';
-                const state = place.state || '';
-                const name = [state, placeName].filter(Boolean).join(' ');
+                const locations = json && json.response && json.response.location;
+                if (!locations || locations.length === 0) return null;
+                const place = locations[0];
+                const latitude = Number(place.y);
+                const longitude = Number(place.x);
+                if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
                 return {
-                    latitude: Number(place.latitude),
-                    longitude: Number(place.longitude),
-                    placeName: placeName,
-                    state: state,
-                    name: name
+                    latitude: latitude,
+                    longitude: longitude,
+                    // e.g. "東京都" + "千代田区" -> "東京都千代田区"
+                    name: [place.prefecture, place.city].filter(Boolean).join('')
                 };
             })
             .catch(() => null);
@@ -600,56 +590,6 @@ class ExtensionBlocks {
             .then(res => (res.ok ? res.json() : null))
             .catch(() => null);
         this._dailyCache[key] = {fetchedAt: now, data: request};
-        return request;
-    }
-
-    /**
-     * Resolve a Japanese place name for a location (memoized). Zippopotam only
-     * returns romaji, so we search Open-Meteo geocoding (language=ja) by the
-     * romaji name and pick the candidate closest to the known coordinates.
-     * Falls back to the romaji name when geocoding finds nothing.
-     * @param {{latitude: number, longitude: number, placeName: string, name: string}} location
-     *     - resolved location with its romaji name
-     * @returns {Promise<string>} - Japanese place name (or romaji fallback)
-     */
-    _lookupJapaneseName (location) {
-        const key = `${location.latitude.toFixed(3)},${location.longitude.toFixed(3)}`;
-        if (this._nameCache[key]) return this._nameCache[key];
-        const fallback = location.name || '';
-        if (!location.placeName) {
-            this._nameCache[key] = Promise.resolve(fallback);
-            return this._nameCache[key];
-        }
-        const params = new URLSearchParams({
-            name: location.placeName,
-            count: '10',
-            language: 'ja',
-            format: 'json'
-        });
-        const request = fetch(`${GEOCODE_API}?${params.toString()}`)
-            .then(res => (res.ok ? res.json() : null))
-            .then(json => {
-                const results = (json && json.results) || [];
-                const jp = results.filter(r => r.country_code === 'JP');
-                const pool = jp.length ? jp : results;
-                if (pool.length === 0) return fallback;
-                // Multiple places can share a romaji name; pick the nearest.
-                let best = pool[0];
-                let bestDiff = Infinity;
-                pool.forEach(r => {
-                    const dLat = Number(r.latitude) - location.latitude;
-                    const dLon = Number(r.longitude) - location.longitude;
-                    const diff = (dLat * dLat) + (dLon * dLon);
-                    if (diff < bestDiff) {
-                        bestDiff = diff;
-                        best = r;
-                    }
-                });
-                const name = [best.admin1, best.name].filter(Boolean).join('');
-                return name || fallback;
-            })
-            .catch(() => fallback);
-        this._nameCache[key] = request;
         return request;
     }
 
@@ -824,7 +764,7 @@ class ExtensionBlocks {
         const zip = normalizeZip(args.ZIP);
         if (!zip) return Promise.resolve('');
         return this._lookupLocation(zip)
-            .then(location => (location ? this._lookupJapaneseName(location) : ''))
+            .then(location => (location ? location.name : ''))
             .catch(() => '');
     }
 }

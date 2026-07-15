@@ -93,11 +93,11 @@ describe("getForecast", () => {
 
     beforeEach(() => {
         global.fetch = jest.fn(url => {
-            if (url.startsWith("https://api.zippopotam.us/")) {
+            if (url.startsWith("https://geoapi.heartrails.com/")) {
                 return Promise.resolve({
                     ok: true,
                     json: () => Promise.resolve({
-                        places: [{latitude: "35.68", longitude: "139.76"}]
+                        response: {location: [{y: "35.68", x: "139.76"}]}
                     })
                 });
             }
@@ -245,11 +245,11 @@ describe("getDailyForecast", () => {
 
     beforeEach(() => {
         global.fetch = jest.fn(url => {
-            if (url.startsWith("https://api.zippopotam.us/")) {
+            if (url.startsWith("https://geoapi.heartrails.com/")) {
                 return Promise.resolve({
                     ok: true,
                     json: () => Promise.resolve({
-                        places: [{latitude: "35.68", longitude: "139.76"}]
+                        response: {location: [{y: "35.68", x: "139.76"}]}
                     })
                 });
             }
@@ -336,51 +336,50 @@ describe("getPlaceName", () => {
     };
 
     const zipResponse = {
-        places: [{
-            "place name": "Chiyoda",
-            state: "Toukyouto",
-            latitude: "35.6845",
-            longitude: "139.7559"
-        }]
-    };
-
-    // Two "Chiyoda" results; the Tokyo one is nearest to the zip coordinates.
-    const geocodeResponse = {
-        results: [
-            {
-                name: "千代田区", admin1: "東京都", country_code: "JP",
-                latitude: 35.68449, longitude: 139.75056
-            },
-            {
-                name: "千代田", admin1: "北海道", country_code: "JP",
-                latitude: 44.09222, longitude: 143.40056
-            }
-        ]
+        response: {
+            location: [{
+                prefecture: "東京都",
+                city: "千代田区",
+                town: "千代田",
+                x: "139.753336",
+                y: "35.684473"
+            }]
+        }
     };
 
     afterEach(() => {
         jest.restoreAllMocks();
     });
 
-    const mockFetch = geocode => jest.fn(url => {
-        if (url.startsWith("https://api.zippopotam.us/")) {
-            return Promise.resolve({ok: true, json: () => Promise.resolve(zipResponse)});
-        }
-        return Promise.resolve({ok: true, json: () => Promise.resolve(geocode)});
-    });
+    const mockFetch = zip => jest.fn(() =>
+        Promise.resolve({ok: true, json: () => Promise.resolve(zip)})
+    );
 
-    test("returns the Japanese place name nearest to the coordinates", async () => {
-        global.fetch = mockFetch(geocodeResponse);
+    test("returns the Japanese place name for the postal code", async () => {
+        global.fetch = mockFetch(zipResponse);
         const block = new blockClass(runtime);
         const result = await block.getPlaceName({ZIP: "100-0001"});
         expect(result).toBe("東京都千代田区");
     });
 
-    test("falls back to the romaji name when geocoding finds nothing", async () => {
-        global.fetch = mockFetch({results: []});
+    test("resolves postal codes with a leading zero", async () => {
+        const sapporo = {
+            response: {
+                location: [{
+                    prefecture: "北海道",
+                    city: "札幌市厚別区",
+                    town: "（その他）",
+                    x: "141.473243",
+                    y: "43.047671"
+                }]
+            }
+        };
+        global.fetch = mockFetch(sapporo);
         const block = new blockClass(runtime);
-        const result = await block.getPlaceName({ZIP: "100-0001"});
-        expect(result).toBe("Toukyouto Chiyoda");
+        const result = await block.getPlaceName({ZIP: "004-0000"});
+        expect(result).toBe("北海道札幌市厚別区");
+        // The API expects the 7 digits without a hyphen, zeros preserved.
+        expect(global.fetch.mock.calls[0][0]).toContain("postal=0040000");
     });
 
     test("returns '' for invalid postal code", async () => {
@@ -391,12 +390,8 @@ describe("getPlaceName", () => {
     });
 
     test("returns '' when the postal code is not found", async () => {
-        global.fetch = jest.fn(url => {
-            if (url.startsWith("https://api.zippopotam.us/")) {
-                return Promise.resolve({ok: true, json: () => Promise.resolve({places: []})});
-            }
-            return Promise.resolve({ok: true, json: () => Promise.resolve({results: []})});
-        });
+        // HeartRails reports unknown codes as an error object without "location".
+        global.fetch = mockFetch({response: {error: "Cities of postal code:'9999999' do not exist."}});
         const block = new blockClass(runtime);
         expect(await block.getPlaceName({ZIP: "999-9999"})).toBe("");
     });
