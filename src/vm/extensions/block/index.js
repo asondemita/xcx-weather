@@ -413,11 +413,35 @@ class ExtensionBlocks {
                         },
                         {
                             text: formatMessage({
+                                id: 'weatherForecast.item.humidity',
+                                default: 'humidity',
+                                description: 'relative humidity menu item'
+                            }),
+                            value: 'humidity'
+                        },
+                        {
+                            text: formatMessage({
+                                id: 'weatherForecast.item.pressure',
+                                default: 'pressure',
+                                description: 'sea-level pressure menu item'
+                            }),
+                            value: 'pressure'
+                        },
+                        {
+                            text: formatMessage({
                                 id: 'weatherForecast.item.precipitation',
                                 default: 'precipitation probability',
                                 description: 'precipitation probability menu item'
                             }),
                             value: 'precipitation'
+                        },
+                        {
+                            text: formatMessage({
+                                id: 'weatherForecast.item.precipAmount',
+                                default: 'precipitation amount',
+                                description: 'precipitation amount menu item'
+                            }),
+                            value: 'precipAmount'
                         },
                         {
                             text: formatMessage({
@@ -450,6 +474,14 @@ class ExtensionBlocks {
                                 description: 'WBGT danger level menu item'
                             }),
                             value: 'wbgtLevel'
+                        },
+                        {
+                            text: formatMessage({
+                                id: 'weatherForecast.item.uvIndex',
+                                default: 'UV index',
+                                description: 'UV index menu item'
+                            }),
+                            value: 'uvIndex'
                         }
                     ]
                 },
@@ -490,6 +522,14 @@ class ExtensionBlocks {
                         },
                         {
                             text: formatMessage({
+                                id: 'weatherForecast.daily.precipAmount',
+                                default: 'precipitation amount',
+                                description: 'daily precipitation amount menu item'
+                            }),
+                            value: 'precipAmount'
+                        },
+                        {
+                            text: formatMessage({
                                 id: 'weatherForecast.daily.sunrise',
                                 default: 'sunrise',
                                 description: 'daily sunrise time menu item'
@@ -503,6 +543,14 @@ class ExtensionBlocks {
                                 description: 'daily sunset time menu item'
                             }),
                             value: 'sunset'
+                        },
+                        {
+                            text: formatMessage({
+                                id: 'weatherForecast.daily.sunshine',
+                                default: 'sunshine duration',
+                                description: 'daily sunshine duration menu item'
+                            }),
+                            value: 'sunshine'
                         }
                     ]
                 }
@@ -553,8 +601,9 @@ class ExtensionBlocks {
         const params = new URLSearchParams({
             latitude: String(location.latitude),
             longitude: String(location.longitude),
-            hourly: 'temperature_2m,relative_humidity_2m,precipitation_probability,' +
-                'weather_code,wind_speed_10m,wind_direction_10m,shortwave_radiation',
+            hourly: 'temperature_2m,relative_humidity_2m,pressure_msl,' +
+                'precipitation_probability,precipitation,weather_code,' +
+                'wind_speed_10m,wind_direction_10m,shortwave_radiation,uv_index',
             wind_speed_unit: 'ms',
             timezone: 'Asia/Tokyo',
             forecast_days: String(FORECAST_DAYS)
@@ -582,7 +631,8 @@ class ExtensionBlocks {
             latitude: String(location.latitude),
             longitude: String(location.longitude),
             daily: 'weather_code,temperature_2m_max,temperature_2m_min,' +
-                'precipitation_probability_max,sunrise,sunset',
+                'precipitation_probability_max,precipitation_sum,sunrise,sunset,' +
+                'sunshine_duration',
             timezone: 'Asia/Tokyo',
             forecast_days: String(WEEKLY_DAYS)
         });
@@ -623,7 +673,8 @@ class ExtensionBlocks {
     /**
      * Report a forecast value for a postal code at a given hour offset.
      * @param {object} args - block arguments
-     * @param {string} args.ITEM - one of temperature/precipitation/weather/windspeed
+     * @param {string} args.ITEM - one of weather/temperature/humidity/pressure/
+     *     precipitation/precipAmount/windspeed/winddir/wbgt/wbgtLevel/uvIndex
      * @param {string} args.HOURS - hours ahead of now (free input, full-width ok)
      * @param {string} args.ZIP - Japanese postal code
      * @returns {Promise<(string|number)>} - the requested value, or '' on failure
@@ -650,10 +701,27 @@ class ExtensionBlocks {
                         const v = hourly.temperature_2m && hourly.temperature_2m[i];
                         return (v === null || typeof v === 'undefined') ? '' : v;
                     }
+                    case 'humidity': {
+                        const v = hourly.relative_humidity_2m && hourly.relative_humidity_2m[i];
+                        return (v === null || typeof v === 'undefined') ? '' : v;
+                    }
+                    case 'pressure': {
+                        const v = hourly.pressure_msl && hourly.pressure_msl[i];
+                        return (v === null || typeof v === 'undefined') ? '' : v;
+                    }
                     case 'precipitation': {
                         const v = hourly.precipitation_probability &&
                             hourly.precipitation_probability[i];
                         return (v === null || typeof v === 'undefined') ? '' : v;
+                    }
+                    case 'precipAmount': {
+                        const v = hourly.precipitation && hourly.precipitation[i];
+                        return (v === null || typeof v === 'undefined') ? '' : v;
+                    }
+                    case 'uvIndex': {
+                        const v = hourly.uv_index && hourly.uv_index[i];
+                        return (v === null || typeof v === 'undefined') ? ''
+                            : Math.round(v * 10) / 10;
                     }
                     case 'windspeed': {
                         const v = hourly.wind_speed_10m && hourly.wind_speed_10m[i];
@@ -699,7 +767,8 @@ class ExtensionBlocks {
     /**
      * Report a daily (weekly) forecast value for a postal code on a given day.
      * @param {object} args - block arguments
-     * @param {string} args.DAILY_ITEM - one of weather/tempMax/tempMin/precipitation
+     * @param {string} args.DAILY_ITEM - one of weather/tempMax/tempMin/
+     *     precipitation/precipAmount/sunrise/sunset/sunshine
      * @param {string} args.DAY - days ahead of today (0 = today, free input, full-width ok)
      * @param {string} args.ZIP - Japanese postal code
      * @returns {Promise<(string|number)>} - the requested value, or '' on failure
@@ -735,6 +804,16 @@ class ExtensionBlocks {
                         const v = daily.precipitation_probability_max &&
                             daily.precipitation_probability_max[day];
                         return (v === null || typeof v === 'undefined') ? '' : v;
+                    }
+                    case 'precipAmount': {
+                        const v = daily.precipitation_sum && daily.precipitation_sum[day];
+                        return (v === null || typeof v === 'undefined') ? '' : v;
+                    }
+                    case 'sunshine': {
+                        const v = daily.sunshine_duration && daily.sunshine_duration[day];
+                        if (v === null || typeof v === 'undefined') return '';
+                        // API returns seconds; report hours (e.g. 23400 -> 6.5).
+                        return Math.round((v / 3600) * 10) / 10;
                     }
                     case 'sunrise':
                     case 'sunset': {

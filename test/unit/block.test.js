@@ -83,11 +83,14 @@ describe("getForecast", () => {
             time: ["2026-06-07T12:00", "2026-06-07T13:00", "2026-06-07T14:00"],
             temperature_2m: [20, 21, 22],
             relative_humidity_2m: [50, 60, 70],
+            pressure_msl: [1013.2, 1010.5, 998.7],
             precipitation_probability: [10, 30, 60],
+            precipitation: [0, 0.5, 3.2],
             weather_code: [0, 3, 63],
             wind_speed_10m: [1.5, 2.0, 3.2],
             wind_direction_10m: [0, 90, 45],
-            shortwave_radiation: [0, 200, 800]
+            shortwave_radiation: [0, 200, 800],
+            uv_index: [0, 2.35, 6.6]
         }
     };
 
@@ -130,6 +133,25 @@ describe("getForecast", () => {
         const block = new blockClass(runtime);
         expect(await block.getForecast({ITEM: "windspeed", HOURS: 0, ZIP: "100-0001"})).toBe(1.5);
         expect(await block.getForecast({ITEM: "precipitation", HOURS: 2, ZIP: "100-0001"})).toBe(60);
+    });
+
+    test("returns relative humidity and pressure", async () => {
+        const block = new blockClass(runtime);
+        expect(await block.getForecast({ITEM: "humidity", HOURS: 1, ZIP: "100-0001"})).toBe(60);
+        expect(await block.getForecast({ITEM: "pressure", HOURS: 2, ZIP: "100-0001"})).toBe(998.7);
+    });
+
+    test("returns precipitation amount in mm (including 0)", async () => {
+        const block = new blockClass(runtime);
+        expect(await block.getForecast({ITEM: "precipAmount", HOURS: 0, ZIP: "100-0001"})).toBe(0);
+        expect(await block.getForecast({ITEM: "precipAmount", HOURS: 2, ZIP: "100-0001"})).toBe(3.2);
+    });
+
+    test("returns UV index rounded to one decimal", async () => {
+        const block = new blockClass(runtime);
+        expect(await block.getForecast({ITEM: "uvIndex", HOURS: 0, ZIP: "100-0001"})).toBe(0);
+        expect(await block.getForecast({ITEM: "uvIndex", HOURS: 1, ZIP: "100-0001"})).toBe(2.4);
+        expect(await block.getForecast({ITEM: "uvIndex", HOURS: 2, ZIP: "100-0001"})).toBe(6.6);
     });
 
     test("returns wind direction as a Japanese compass label", async () => {
@@ -230,6 +252,8 @@ describe("getDailyForecast", () => {
             temperature_2m_max: [28, 29, 25, 30, 31, 27, 26],
             temperature_2m_min: [18, 19, 17, 20, 21, 16, 15],
             precipitation_probability_max: [0, 20, 80, 10, 5, 60, 90],
+            precipitation_sum: [0, 1.2, 25.4, 0.3, 0, 8, 40.5],
+            sunshine_duration: [43200, 36000, 7200, 23400, 45000, 10800, 0],
             sunrise: [
                 "2026-06-15T04:25", "2026-06-16T04:25", "2026-06-17T04:25",
                 "2026-06-18T04:26", "2026-06-19T04:26", "2026-06-20T04:26",
@@ -284,6 +308,25 @@ describe("getDailyForecast", () => {
             {DAILY_ITEM: "precipitation", DAY: 2, ZIP: "100-0001"}
         );
         expect(result).toBe(80);
+    });
+
+    test("returns precipitation amount in mm (including 0)", async () => {
+        const block = new blockClass(runtime);
+        expect(await block.getDailyForecast({DAILY_ITEM: "precipAmount", DAY: 0, ZIP: "100-0001"}))
+            .toBe(0);
+        expect(await block.getDailyForecast({DAILY_ITEM: "precipAmount", DAY: 2, ZIP: "100-0001"}))
+            .toBe(25.4);
+    });
+
+    test("returns sunshine duration converted from seconds to hours", async () => {
+        const block = new blockClass(runtime);
+        // 43200 s -> 12 h, 23400 s -> 6.5 h, 0 s -> 0 h
+        expect(await block.getDailyForecast({DAILY_ITEM: "sunshine", DAY: 0, ZIP: "100-0001"}))
+            .toBe(12);
+        expect(await block.getDailyForecast({DAILY_ITEM: "sunshine", DAY: 3, ZIP: "100-0001"}))
+            .toBe(6.5);
+        expect(await block.getDailyForecast({DAILY_ITEM: "sunshine", DAY: 6, ZIP: "100-0001"}))
+            .toBe(0);
     });
 
     test("returns sunrise and sunset as HH:MM", async () => {
@@ -449,8 +492,9 @@ describe("getInfo", () => {
         const block = new blockClass(runtime);
         const values = block.getInfo().menus.itemMenu.items.map(item => item.value);
         expect(values).toEqual([
-            "weather", "temperature", "precipitation",
-            "windspeed", "winddir", "wbgt", "wbgtLevel"
+            "weather", "temperature", "humidity", "pressure",
+            "precipitation", "precipAmount", "windspeed", "winddir",
+            "wbgt", "wbgtLevel", "uvIndex"
         ]);
     });
 
@@ -458,7 +502,8 @@ describe("getInfo", () => {
         const block = new blockClass(runtime);
         const values = block.getInfo().menus.dailyItemMenu.items.map(item => item.value);
         expect(values).toEqual([
-            "weather", "tempMax", "tempMin", "precipitation", "sunrise", "sunset"
+            "weather", "tempMax", "tempMin", "precipitation",
+            "precipAmount", "sunrise", "sunset", "sunshine"
         ]);
     });
 
