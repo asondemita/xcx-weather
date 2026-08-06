@@ -413,7 +413,7 @@ const toCoordinate = value => toNumber(value);
 
 /**
  * Read a cached request, treating an expired entry as absent.
- * @param {Object.<string, {data: Promise<?object>, expiresAt: number}>} cache - cache to read
+ * @param {object.<string, {data: Promise<?object>, expiresAt: number}>} cache - cache to read
  * @param {string} key - cache key
  * @returns {?Promise<?object>} - the cached request, or null when absent/expired
  */
@@ -437,7 +437,7 @@ const readCache = (cache, key) => {
  * Store an in-flight request, shortening its lifetime if it turns out to have
  * failed. Concurrent callers still share the single in-flight promise, so a
  * block used inside a `forever` loop issues at most one request per TTL.
- * @param {Object.<string, {data: Promise<?object>, expiresAt: number}>} cache - cache to write
+ * @param {object.<string, {data: Promise<?object>, expiresAt: number}>} cache - cache to write
  * @param {string} key - cache key
  * @param {Promise<?object>} request - in-flight request, which resolves to null on failure
  * @param {number} ttl - lifetime (ms) to keep a successful result
