@@ -128,7 +128,7 @@ const WEEKLY_DAYS = 7;
 const WEATHER_CODE_JA = {
     0: '快晴',
     1: '晴れ',
-    2: '晴れ時々曇り',
+    2: '晴れ（雲多め）',
     3: '曇り',
     45: '霧',
     48: '着氷性の霧',
@@ -152,8 +152,11 @@ const WEATHER_CODE_JA = {
     85: 'にわか雪（弱）',
     86: 'にわか雪（強）',
     95: '雷雨',
-    96: '雷雨（弱いひょう）',
-    99: '雷雨（強いひょう）'
+    // In WMO 4677 the 弱/強 qualifies the thunderstorm, not the hail, and
+    // Open-Meteo documents its hail forecast as Central Europe only — so the
+    // hail is hedged rather than asserted.
+    96: '雷雨（ひょうの可能性）',
+    99: '激しい雷雨（ひょうの可能性）'
 };
 
 /**
@@ -259,19 +262,21 @@ const summarizeDayWeather = (times, codes, date) => {
     if (daytime.length === 0) return null;
 
     const hoursOf = code => daytime.filter(c => c === code).length;
+    const persists = code => hoursOf(code) >= LIGHT_MIN_HOURS;
+
     const significant = daytime.filter(code => {
         if (CLEAR_CODES.indexOf(code) !== -1) return false;
-        if (LIGHT_CODES.indexOf(code) !== -1) return hoursOf(code) >= LIGHT_MIN_HOURS;
-        return true;
+        // Fog and drizzle only count once they last; anything heavier wins at once.
+        return LIGHT_CODES.indexOf(code) === -1 || persists(code);
     });
+    if (significant.length > 0) return Math.max.apply(null, significant);
+
+    // Nothing precipitating, so report the sky — but apply the same persistence
+    // rule, or one passing hour of high cloud turns a clear day into 曇り.
     const clear = daytime.filter(code => CLEAR_CODES.indexOf(code) !== -1);
-    let pool = daytime;
-    if (significant.length > 0) {
-        pool = significant;
-    } else if (clear.length > 0) {
-        pool = clear;
-    }
-    return Math.max.apply(null, pool);
+    const lasting = clear.filter(persists);
+    const pool = lasting.length > 0 ? lasting : clear;
+    return Math.max.apply(null, pool.length > 0 ? pool : daytime);
 };
 
 /**

@@ -52,8 +52,15 @@ describe("summarizeDayWeather", () => {
     });
 
     test("falls back to the cloudiest sky when nothing precipitates", () => {
-        expect(day(fill(0, {12: 3}))).toBe(3);
+        expect(day(fill(0, {12: 3, 13: 3}))).toBe(3);
         expect(day(new Array(24).fill(0))).toBe(0);
+    });
+
+    test("ignores a single passing hour of cloud", () => {
+        // 12 clear daytime hours + one hour of (usually high) cloud is a clear
+        // day; Open-Meteo's daily code would call it 曇り.
+        expect(day(fill(0, {18: 3}))).toBe(0);
+        expect(day(fill(1, {12: 3}))).toBe(1);
     });
 
     test("returns null when the day has no hourly data", () => {
