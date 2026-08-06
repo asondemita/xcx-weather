@@ -522,8 +522,10 @@ const readCache = (cache, key) => {
 
 /**
  * Store an in-flight request, shortening its lifetime if it turns out to have
- * failed. Concurrent callers still share the single in-flight promise, so a
- * block used inside a `forever` loop issues at most one request per TTL.
+ * failed. Concurrent callers share the single in-flight promise, so a block used
+ * inside a `forever` loop normally issues one request per TTL. The TTL is
+ * measured from the request's start, so a request that outlives it can be joined
+ * by a second one — rare, and harmless beyond the extra call.
  * @param {object.<string, {data: Promise<?object>, expiresAt: number}>} cache - cache to write
  * @param {string} key - cache key
  * @param {Promise<?object>} request - in-flight request, which resolves to null on failure
