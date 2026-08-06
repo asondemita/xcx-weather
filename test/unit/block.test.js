@@ -60,6 +60,23 @@ describe("summarizeDayWeather", () => {
         expect(day(codes, fill(90))).toBe(53);
     });
 
+    test("finds significant weather into the evening, but not before dawn", () => {
+        // Japan's warm-season convective maximum is around 20:00-21:00, and this
+        // extension is used to build hazard alerts.
+        expect(day(fill(0, {20: 95}), fill(10))).toBe(95);
+        expect(day(fill(0, {21: 63}), fill(10))).toBe(63);
+        // 22:00 onward is outside the scan, as are the small hours — otherwise
+        // pre-dawn rain would take over a sunny day again.
+        expect(day(fill(0, {22: 95}), fill(10))).toBe(1);
+        expect(day(fill(0, {3: 95}), fill(10))).toBe(1);
+    });
+
+    test("describes the sky from daylight hours only", () => {
+        // Evening cloud must not darken the day's sky word.
+        expect(day(fill(1, {19: 3, 20: 3, 21: 3}), fill(20, {19: 100, 20: 100, 21: 100})))
+            .toBe(1);
+    });
+
     test("reports significant weather after a single hour, whatever the sky", () => {
         expect(day(fill(0, {12: 95}), fill(10))).toBe(95); // 雷雨
         expect(day(fill(1, {15: 63}), fill(10))).toBe(63); // 雨

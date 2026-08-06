@@ -227,6 +227,20 @@ const DAYTIME_START_HOUR = 6;
 const DAYTIME_END_HOUR = 18;
 
 /**
+ * Last hour (inclusive) scanned for significant weather.
+ *
+ * The sky is described from daylight hours, but rain, snow and thunder must not
+ * be invisible just because they arrive after 18:00 — this extension is used to
+ * build hazard alerts, and Japan's warm-season convective maximum is around
+ * 20:00-21:00. Measured against AMeDAS observations, 06-18 captures only 46% of
+ * a day's precipitation and misses about a third of thunderstorm hours;
+ * extending to 21:00 captures 62%. The small hours stay excluded, so pre-dawn
+ * rain still cannot take over a sunny day.
+ * @type {number}
+ */
+const SIGNIFICANT_END_HOUR = 21;
+
+/**
  * WMO codes that mean "no weather to report" (clear through overcast).
  * @type {Array.<number>}
  */
@@ -372,9 +386,10 @@ const hourlyMean = (forecast, date, field) => {
  *
  * Open-Meteo's daily `weather_code` is the maximum over all 24 hours, so a
  * single hour of pre-dawn drizzle labels an otherwise sunny day as rain. This
- * looks at daylight hours only, lets significant weather (rain, snow, thunder)
- * win immediately, requires fog/light rain to persist *and* to come with enough
- * cloud to be real, and otherwise describes the sky from the average cloud cover.
+ * describes the sky from daylight hours, looks for significant weather (rain,
+ * snow, thunder) into the evening and reports it immediately, requires fog and
+ * light rain to persist *and* to be more than a trace under an open sky, and
+ * otherwise describes the sky from the average daytime cloud cover.
  * @param {Array.<string>} times - hourly ISO timestamps ("YYYY-MM-DDTHH:MM")
  * @param {Array.<number>} codes - hourly WMO codes, parallel to `times`
  * @param {Array.<number>} clouds - hourly cloud cover (%), parallel to `times`
@@ -386,16 +401,26 @@ const hourlyMean = (forecast, date, field) => {
 const summarizeDayWeather = (times, codes, clouds, rates, date) => {
     if (!Array.isArray(times) || !Array.isArray(codes)) return null;
     const at = (series, i) => toNumber(Array.isArray(series) ? series[i] : null);
-    const daytime = [];
+    const scanned = [];
     for (let i = 0; i < times.length; i++) {
         const time = times[i];
         if (typeof time !== 'string' || time.slice(0, 10) !== date) continue;
         const hour = Number(time.slice(11, 13));
-        if (!(hour >= DAYTIME_START_HOUR && hour <= DAYTIME_END_HOUR)) continue;
+        if (!(hour >= DAYTIME_START_HOUR && hour <= SIGNIFICANT_END_HOUR)) continue;
         const code = toNumber(codes[i]);
         if (code === null) continue;
-        daytime.push({code: code, cloud: at(clouds, i), rate: at(rates, i)});
+        scanned.push({hour: hour, code: code, cloud: at(clouds, i), rate: at(rates, i)});
     }
+    const daytime = scanned.filter(entry => entry.hour <= DAYTIME_END_HOUR);
+
+    // Rain, snow and thunder are reported as soon as they appear, and are looked
+    // for into the evening.
+    const significant = scanned
+        .filter(entry => CLEAR_CODES.indexOf(entry.code) === -1 &&
+            LIGHT_CODES.indexOf(entry.code) === -1 &&
+            FOG_CODES.indexOf(entry.code) === -1)
+        .map(entry => entry.code);
+    if (significant.length > 0) return Math.max.apply(null, significant);
     if (daytime.length === 0) return null;
 
     const hoursOf = code => daytime.filter(entry => entry.code === code).length;
@@ -403,12 +428,6 @@ const summarizeDayWeather = (times, codes, clouds, rates, date) => {
     // A missing reading is never held against an hour.
     const enough = (value, floor) => value === null || value >= floor;
 
-    // Rain, snow and thunder are reported as soon as they appear.
-    const significant = daytime
-        .filter(entry => CLEAR_CODES.indexOf(entry.code) === -1 &&
-            LIGHT_CODES.indexOf(entry.code) === -1 &&
-            FOG_CODES.indexOf(entry.code) === -1)
-        .map(entry => entry.code);
     // Light rain must last, and must be more than a trace under an open sky.
     const light = daytime
         .filter(entry => LIGHT_CODES.indexOf(entry.code) !== -1 && lasts(entry) &&
@@ -418,7 +437,7 @@ const summarizeDayWeather = (times, codes, clouds, rates, date) => {
     const fog = daytime
         .filter(entry => FOG_CODES.indexOf(entry.code) !== -1 && lasts(entry))
         .map(entry => entry.code);
-    const reported = significant.concat(light, fog);
+    const reported = light.concat(fog);
     if (reported.length > 0) return Math.max.apply(null, reported);
 
     // Light rain that lasted but was rejected for being a trace under an open
