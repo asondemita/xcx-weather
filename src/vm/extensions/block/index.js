@@ -265,6 +265,43 @@ const LIGHT_CODES = [51, 53, 55];
 const FOG_CODES = [45, 48];
 
 /**
+ * Significant codes grouped by how bad an hour of each one is, mildest tier
+ * first.
+ *
+ * WMO code order is not a severity order: showers (80-82) and snow showers
+ * (85-86) are numerically above steady rain (61-65) and snow (71-75), so taking
+ * the largest code let one hour of light showers speak for a day of heavy rain.
+ * Within a tier the codes are the same intensity in different forms — steady,
+ * showery, frozen — so which one is reported is settled by how long it lasted.
+ * Codes in no tier rank below every code that is in one.
+ * @type {Array.<Array.<number>>}
+ */
+const SEVERITY_TIERS = [
+    [77],
+    [61, 71, 80, 85],
+    [63, 66, 73, 81],
+    [65, 67, 75, 82, 86],
+    [95],
+    [96],
+    [99]
+];
+
+/**
+ * Pick the code that represents a day: the worst hour first, then — among hours
+ * that are equally bad — the one that lasted longest, so six hours of rain are
+ * not described by the single hour of showers beside them. The larger code
+ * breaks a remaining tie, which keeps the choice deterministic.
+ * @param {Array.<number>} codes - WMO codes, one per matching hour
+ * @returns {number} - the representative code
+ */
+const representativeCode = codes => {
+    const severityOf = code => SEVERITY_TIERS.findIndex(tier => tier.indexOf(code) !== -1) + 1;
+    const hoursOf = code => codes.filter(entry => entry === code).length;
+    return codes.slice().sort((a, b) =>
+        (severityOf(b) - severityOf(a)) || (hoursOf(b) - hoursOf(a)) || (b - a))[0];
+};
+
+/**
  * How many daytime hours a LIGHT_CODES condition must last before it is allowed
  * to represent the day.
  * @type {number}
@@ -469,7 +506,7 @@ const summarizeDayWeather = (times, codes, clouds, rates, date) => {
             LIGHT_CODES.indexOf(entry.code) === -1 &&
             FOG_CODES.indexOf(entry.code) === -1)
         .map(entry => entry.code);
-    if (significant.length > 0) return Math.max.apply(null, significant);
+    if (significant.length > 0) return representativeCode(significant);
     if (daytime.length === 0) return null;
 
     const hoursOf = code => daytime.filter(entry => entry.code === code).length;
@@ -1097,8 +1134,9 @@ class ExtensionBlocks {
                 'precipitation_probability_max,precipitation_sum,sunrise,sunset,' +
                 'sunshine_duration',
             // The day's weather is derived from the hourly codes and cloud cover
-            // (see summarizeDayWeather), and today's precipitation probability
-            // from the hours still to come. All ride along on the same request.
+            // (see summarizeDayWeather) and its precipitation probability from
+            // the hourly probabilities (see hourlyMean). Both ride along on the
+            // same request.
             hourly: 'weather_code,cloud_cover,precipitation,precipitation_probability',
             timezone: 'Asia/Tokyo',
             forecast_days: String(WEEKLY_DAYS)

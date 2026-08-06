@@ -89,6 +89,24 @@ describe("summarizeDayWeather", () => {
         expect(day(fill(1, {9: 51, 10: 51, 13: 95}))).toBe(95);
     });
 
+    test("ranks by severity, not by WMO code order", () => {
+        // 80-82 (showers) and 85-86 (snow showers) sit numerically above 61-65
+        // (rain) and 71-75 (snow), so the largest code is not the worst one.
+        expect(day(fill(1, {8: 65, 9: 65, 10: 65, 11: 65, 15: 80}))).toBe(65);
+        expect(day(fill(1, {8: 75, 9: 75, 10: 75, 15: 85}))).toBe(75);
+        expect(day(fill(1, {8: 63, 15: 82}))).toBe(82);
+        expect(day(fill(1, {8: 65, 15: 77}))).toBe(65);
+    });
+
+    test("lets the longer spell represent the day when severity ties", () => {
+        expect(day(fill(1, {8: 63, 9: 63, 10: 63, 11: 63, 15: 81}))).toBe(63);
+        expect(day(fill(1, {8: 81, 9: 81, 10: 81, 11: 81, 15: 63}))).toBe(81);
+    });
+
+    test("still reports a thunderstorm that lasts a single hour", () => {
+        expect(day(fill(1, {8: 65, 9: 65, 10: 65, 11: 65, 15: 95}))).toBe(95);
+    });
+
     test("describes the sky from the average daytime cloud cover", () => {
         // 快晴 is absent on purpose: JMA never publishes it in a forecast.
         expect(day(fill(3), fill(5))).toBe(1);
