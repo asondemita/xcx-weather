@@ -96,7 +96,7 @@ const fetchJson = url => new Promise(resolve => {
         finish(null);
     }, REQUEST_TIMEOUT);
     try {
-        fetch(url, controller ? {signal: controller.signal} : undefined)
+        fetch(url, controller ? {signal: controller.signal} : {})
             .then(res => (res.ok ? res.json() : null))
             .then(finish, () => finish(null));
     } catch (e) {
