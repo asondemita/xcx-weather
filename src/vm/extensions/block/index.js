@@ -65,6 +65,47 @@ const FORECAST_TTL = 10 * 60 * 1000;
 const FAILURE_TTL = 20 * 1000;
 
 /**
+ * Timeout (ms) for one API request. Without it a request that never settles
+ * would sit in the cache unresolved forever — and because a resolved location
+ * is kept for the whole session, a hung postal-code lookup would blank every
+ * block until the page is reloaded.
+ * @type {number}
+ */
+const REQUEST_TIMEOUT = 15 * 1000;
+
+/**
+ * Fetch a URL and parse it as JSON, resolving to null on *any* failure:
+ * network error, HTTP error status, unparseable body, timeout, or `fetch`
+ * itself being unavailable. Never rejects, so callers can treat null uniformly
+ * and a reporter block can never break its thread with a rejected promise.
+ * @param {string} url - request URL
+ * @returns {Promise<?object>} - parsed body, or null
+ */
+const fetchJson = url => new Promise(resolve => {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    let timer = null;
+    let settled = false;
+    const finish = value => {
+        if (settled) return;
+        settled = true;
+        if (timer !== null) clearTimeout(timer);
+        resolve(value);
+    };
+    timer = setTimeout(() => {
+        if (controller) controller.abort();
+        finish(null);
+    }, REQUEST_TIMEOUT);
+    try {
+        fetch(url, controller ? {signal: controller.signal} : undefined)
+            .then(res => (res.ok ? res.json() : null))
+            .then(finish, () => finish(null));
+    } catch (e) {
+        // `fetch` missing or throwing synchronously on an old host.
+        finish(null);
+    }
+});
+
+/**
  * Number of forecast days requested from Open-Meteo. The window starts at today
  * 00:00 local time, so this reaches roughly three days past the current hour.
  * Hours beyond it report an empty value.
@@ -338,6 +379,39 @@ const parseLooseNumber = raw => {
 };
 
 /**
+ * Coerce an API field to a number for reporting, rejecting anything that is not
+ * genuinely numeric. `Number()` alone turns null, '', ' ', [], and false into 0
+ * and objects into NaN, either of which would put a wrong number or the literal
+ * text "NaN" on the stage.
+ * @param {*} value - raw value from an API response
+ * @returns {?number} - the number, or null when it is not usable
+ */
+const toNumber = value => {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value !== 'string' || value.trim() === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+/**
+ * Same as toNumber, but shaped for a reporter block: missing or unusable values
+ * become the empty string rather than null.
+ * @param {*} value - raw value from an API response
+ * @returns {(number|string)} - the number, or ''
+ */
+const reportNumber = value => {
+    const parsed = toNumber(value);
+    return parsed === null ? '' : parsed;
+};
+
+/**
+ * Parse a latitude/longitude string from the postal-code API.
+ * @param {*} value - raw coordinate field
+ * @returns {?number} - the coordinate, or null when it is not usable
+ */
+const toCoordinate = value => toNumber(value);
+
+/**
  * Read a cached request, treating an expired entry as absent.
  * @param {Object.<string, {data: Promise<?object>, expiresAt: number}>} cache - cache to read
  * @param {string} key - cache key
@@ -345,7 +419,17 @@ const parseLooseNumber = raw => {
  */
 const readCache = (cache, key) => {
     const entry = cache[key];
-    if (!entry || Date.now() >= entry.expiresAt) return null;
+    if (!entry) return null;
+    const now = Date.now();
+    if (now >= entry.expiresAt) {
+        // Drop it rather than just reporting a miss: a project that sweeps
+        // through postal codes would otherwise retain every payload forever.
+        delete cache[key];
+        return null;
+    }
+    // A clock that jumps backwards (NTP correction, a shared classroom PC being
+    // set by hand) must not strand an entry far in the future.
+    if (entry.expiresAt - now > entry.ttl) entry.expiresAt = now + entry.ttl;
     return entry.data;
 };
 
@@ -360,11 +444,20 @@ const readCache = (cache, key) => {
  * @returns {Promise<?object>} - the same request
  */
 const writeCache = (cache, key, request, ttl) => {
-    const entry = {data: request, expiresAt: Date.now() + ttl};
+    const entry = {data: request, ttl: ttl, expiresAt: Date.now() + ttl};
     cache[key] = entry;
-    request.then(result => {
-        if (!result) entry.expiresAt = Math.min(entry.expiresAt, Date.now() + FAILURE_TTL);
-    });
+    const expireSoon = () => {
+        entry.ttl = Math.min(entry.ttl, FAILURE_TTL);
+        entry.expiresAt = Math.min(entry.expiresAt, Date.now() + FAILURE_TTL);
+    };
+    // Handle rejection too: `request` is expected to be already terminated, but
+    // this helper must not depend on that convention to stay correct.
+    request.then(
+        result => {
+            if (!result) expireSoon();
+        },
+        expireSoon
+    );
     return request;
 };
 
@@ -721,20 +814,27 @@ class ExtensionBlocks {
     _lookupLocation (zip) {
         const cached = readCache(this._geoCache, zip);
         if (cached) return cached;
-        const request = fetch(`${ZIP_API}${zip.replace('-', '')}`)
-            .then(res => (res.ok ? res.json() : null))
+        const request = fetchJson(`${ZIP_API}${zip.replace('-', '')}`)
             .then(json => {
                 const locations = json && json.response && json.response.location;
                 if (!locations || locations.length === 0) return null;
                 const place = locations[0];
-                const latitude = Number(place.y);
-                const longitude = Number(place.x);
-                if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+                const latitude = toCoordinate(place.y);
+                const longitude = toCoordinate(place.x);
+                // Blank or missing coordinates coerce to 0 through Number(),
+                // which would silently forecast the Gulf of Guinea. These are
+                // Japanese postal codes, so anything outside Japan is bad data.
+                if (latitude === null || longitude === null) return null;
+                if (latitude < 20 || latitude > 46 || longitude < 122 || longitude > 154) {
+                    return null;
+                }
                 return {
                     latitude: latitude,
                     longitude: longitude,
                     // e.g. "東京都" + "千代田区" -> "東京都千代田区"
-                    name: [place.prefecture, place.city].filter(Boolean).join('')
+                    name: [place.prefecture, place.city]
+                        .filter(part => typeof part === 'string' && part !== '')
+                        .join('')
                 };
             })
             .catch(() => null);
@@ -762,9 +862,7 @@ class ExtensionBlocks {
             timezone: 'Asia/Tokyo',
             forecast_days: String(FORECAST_DAYS)
         });
-        const request = fetch(`${FORECAST_API}?${params.toString()}`)
-            .then(res => (res.ok ? res.json() : null))
-            .catch(() => null);
+        const request = fetchJson(`${FORECAST_API}?${params.toString()}`);
         return writeCache(this._forecastCache, key, request, FORECAST_TTL);
     }
 
@@ -789,9 +887,7 @@ class ExtensionBlocks {
             timezone: 'Asia/Tokyo',
             forecast_days: String(WEEKLY_DAYS)
         });
-        const request = fetch(`${FORECAST_API}?${params.toString()}`)
-            .then(res => (res.ok ? res.json() : null))
-            .catch(() => null);
+        const request = fetchJson(`${FORECAST_API}?${params.toString()}`);
         return writeCache(this._dailyCache, key, request, FORECAST_TTL);
     }
 
@@ -857,33 +953,32 @@ class ExtensionBlocks {
                     switch (item) {
                     case 'temperature': {
                         const v = hourly.temperature_2m && hourly.temperature_2m[i];
-                        return (v === null || typeof v === 'undefined') ? '' : v;
+                        return reportNumber(v);
                     }
                     case 'humidity': {
                         const v = hourly.relative_humidity_2m && hourly.relative_humidity_2m[i];
-                        return (v === null || typeof v === 'undefined') ? '' : v;
+                        return reportNumber(v);
                     }
                     case 'pressure': {
                         const v = hourly.pressure_msl && hourly.pressure_msl[i];
-                        return (v === null || typeof v === 'undefined') ? '' : v;
+                        return reportNumber(v);
                     }
                     case 'precipitation': {
                         const v = hourly.precipitation_probability &&
                             hourly.precipitation_probability[i];
-                        return (v === null || typeof v === 'undefined') ? '' : v;
+                        return reportNumber(v);
                     }
                     case 'precipAmount': {
                         const v = hourly.precipitation && hourly.precipitation[i];
-                        return (v === null || typeof v === 'undefined') ? '' : v;
+                        return reportNumber(v);
                     }
                     case 'uvIndex': {
-                        const v = hourly.uv_index && hourly.uv_index[i];
-                        return (v === null || typeof v === 'undefined') ? ''
-                            : Math.round(v * 10) / 10;
+                        const v = toNumber(hourly.uv_index && hourly.uv_index[i]);
+                        return v === null ? '' : Math.round(v * 10) / 10;
                     }
                     case 'windspeed': {
                         const v = hourly.wind_speed_10m && hourly.wind_speed_10m[i];
-                        return (v === null || typeof v === 'undefined') ? '' : v;
+                        return reportNumber(v);
                     }
                     case 'winddir': {
                         const v = hourly.wind_direction_10m && hourly.wind_direction_10m[i];
@@ -895,14 +990,15 @@ class ExtensionBlocks {
                     }
                     case 'wbgt':
                     case 'wbgtLevel': {
-                        const ta = hourly.temperature_2m && hourly.temperature_2m[i];
-                        const rh = hourly.relative_humidity_2m && hourly.relative_humidity_2m[i];
-                        const sr = hourly.shortwave_radiation && hourly.shortwave_radiation[i];
-                        const ws = hourly.wind_speed_10m && hourly.wind_speed_10m[i];
-                        const missing = [ta, rh, sr, ws].some(
-                            v => v === null || typeof v === 'undefined'
+                        const ta = toNumber(hourly.temperature_2m && hourly.temperature_2m[i]);
+                        const rh = toNumber(
+                            hourly.relative_humidity_2m && hourly.relative_humidity_2m[i]
                         );
-                        if (missing) return '';
+                        const sr = toNumber(
+                            hourly.shortwave_radiation && hourly.shortwave_radiation[i]
+                        );
+                        const ws = toNumber(hourly.wind_speed_10m && hourly.wind_speed_10m[i]);
+                        if ([ta, rh, sr, ws].some(v => v === null)) return '';
                         const wbgt = computeWbgt(ta, rh, sr, ws);
                         if (item === 'wbgtLevel') {
                             const level = wbgtLevel(wbgt);
@@ -963,24 +1059,24 @@ class ExtensionBlocks {
                     }
                     case 'tempMax': {
                         const v = daily.temperature_2m_max && daily.temperature_2m_max[index];
-                        return (v === null || typeof v === 'undefined') ? '' : v;
+                        return reportNumber(v);
                     }
                     case 'tempMin': {
                         const v = daily.temperature_2m_min && daily.temperature_2m_min[index];
-                        return (v === null || typeof v === 'undefined') ? '' : v;
+                        return reportNumber(v);
                     }
                     case 'precipitation': {
                         const v = daily.precipitation_probability_max &&
                             daily.precipitation_probability_max[index];
-                        return (v === null || typeof v === 'undefined') ? '' : v;
+                        return reportNumber(v);
                     }
                     case 'precipAmount': {
                         const v = daily.precipitation_sum && daily.precipitation_sum[index];
-                        return (v === null || typeof v === 'undefined') ? '' : v;
+                        return reportNumber(v);
                     }
                     case 'sunshine': {
-                        const v = daily.sunshine_duration && daily.sunshine_duration[index];
-                        if (v === null || typeof v === 'undefined') return '';
+                        const v = toNumber(daily.sunshine_duration && daily.sunshine_duration[index]);
+                        if (v === null) return '';
                         // API returns seconds; report hours (e.g. 23400 -> 6.5).
                         return Math.round((v / 3600) * 10) / 10;
                     }
@@ -988,9 +1084,9 @@ class ExtensionBlocks {
                     case 'sunset': {
                         const series = item === 'sunrise' ? daily.sunrise : daily.sunset;
                         const v = series && series[index];
-                        if (v === null || typeof v === 'undefined') return '';
+                        if (typeof v !== 'string') return '';
                         // ISO8601 like "2026-06-15T04:25" -> "04:25".
-                        return String(v).split('T')[1] || '';
+                        return v.split('T')[1] || '';
                     }
                     default:
                         return '';
