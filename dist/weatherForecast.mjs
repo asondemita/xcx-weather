@@ -1126,6 +1126,20 @@ var DAYTIME_START_HOUR = 6;
 var DAYTIME_END_HOUR = 18;
 
 /**
+ * Last hour (inclusive) scanned for significant weather.
+ *
+ * The sky is described from daylight hours, but rain, snow and thunder must not
+ * be invisible just because they arrive after 18:00 — this extension is used to
+ * build hazard alerts, and Japan's warm-season convective maximum is around
+ * 20:00-21:00. Measured against AMeDAS observations, 06-18 captures only 46% of
+ * a day's precipitation and misses about a third of thunderstorm hours;
+ * extending to 21:00 captures 62%. The small hours stay excluded, so pre-dawn
+ * rain still cannot take over a sunny day.
+ * @type {number}
+ */
+var SIGNIFICANT_END_HOUR = 21;
+
+/**
  * WMO codes that mean "no weather to report" (clear through overcast).
  * @type {Array.<number>}
  */
@@ -1278,9 +1292,10 @@ var hourlyMean = function hourlyMean(forecast, date, field) {
  *
  * Open-Meteo's daily `weather_code` is the maximum over all 24 hours, so a
  * single hour of pre-dawn drizzle labels an otherwise sunny day as rain. This
- * looks at daylight hours only, lets significant weather (rain, snow, thunder)
- * win immediately, requires fog/light rain to persist *and* to come with enough
- * cloud to be real, and otherwise describes the sky from the average cloud cover.
+ * describes the sky from daylight hours, looks for significant weather (rain,
+ * snow, thunder) into the evening and reports it immediately, requires fog and
+ * light rain to persist *and* to be more than a trace under an open sky, and
+ * otherwise describes the sky from the average daytime cloud cover.
  * @param {Array.<string>} times - hourly ISO timestamps ("YYYY-MM-DDTHH:MM")
  * @param {Array.<number>} codes - hourly WMO codes, parallel to `times`
  * @param {Array.<number>} clouds - hourly cloud cover (%), parallel to `times`
@@ -1294,20 +1309,33 @@ var summarizeDayWeather = function summarizeDayWeather(times, codes, clouds, rat
   var at = function at(series, i) {
     return toNumber(Array.isArray(series) ? series[i] : null);
   };
-  var daytime = [];
+  var scanned = [];
   for (var i = 0; i < times.length; i++) {
     var time = times[i];
     if (typeof time !== 'string' || time.slice(0, 10) !== date) continue;
     var hour = Number(time.slice(11, 13));
-    if (!(hour >= DAYTIME_START_HOUR && hour <= DAYTIME_END_HOUR)) continue;
+    if (!(hour >= DAYTIME_START_HOUR && hour <= SIGNIFICANT_END_HOUR)) continue;
     var code = toNumber(codes[i]);
     if (code === null) continue;
-    daytime.push({
+    scanned.push({
+      hour: hour,
       code: code,
       cloud: at(clouds, i),
       rate: at(rates, i)
     });
   }
+  var daytime = scanned.filter(function (entry) {
+    return entry.hour <= DAYTIME_END_HOUR;
+  });
+
+  // Rain, snow and thunder are reported as soon as they appear, and are looked
+  // for into the evening.
+  var significant = scanned.filter(function (entry) {
+    return CLEAR_CODES.indexOf(entry.code) === -1 && LIGHT_CODES.indexOf(entry.code) === -1 && FOG_CODES.indexOf(entry.code) === -1;
+  }).map(function (entry) {
+    return entry.code;
+  });
+  if (significant.length > 0) return Math.max.apply(null, significant);
   if (daytime.length === 0) return null;
   var hoursOf = function hoursOf(code) {
     return daytime.filter(function (entry) {
@@ -1322,12 +1350,6 @@ var summarizeDayWeather = function summarizeDayWeather(times, codes, clouds, rat
     return value === null || value >= floor;
   };
 
-  // Rain, snow and thunder are reported as soon as they appear.
-  var significant = daytime.filter(function (entry) {
-    return CLEAR_CODES.indexOf(entry.code) === -1 && LIGHT_CODES.indexOf(entry.code) === -1 && FOG_CODES.indexOf(entry.code) === -1;
-  }).map(function (entry) {
-    return entry.code;
-  });
   // Light rain must last, and must be more than a trace under an open sky.
   var light = daytime.filter(function (entry) {
     return LIGHT_CODES.indexOf(entry.code) !== -1 && lasts(entry) && enough(entry.cloud, LIGHT_MIN_CLOUD) && enough(entry.rate, LIGHT_MIN_RATE);
@@ -1340,7 +1362,7 @@ var summarizeDayWeather = function summarizeDayWeather(times, codes, clouds, rat
   }).map(function (entry) {
     return entry.code;
   });
-  var reported = significant.concat(light, fog);
+  var reported = light.concat(fog);
   if (reported.length > 0) return Math.max.apply(null, reported);
 
   // Light rain that lasted but was rejected for being a trace under an open
