@@ -507,27 +507,46 @@ describe("getDailyForecast", () => {
             .toBe(17);
     });
 
-    test("reports only the hours still ahead for today", async () => {
+    test("averages the hourly probabilities instead of taking the peak", async () => {
         const block = new blockClass(runtime);
-        // Frozen at 09:00 JST. The day peaked at 90% before dawn, but the rest
-        // of the day is 20% — reporting 90% would describe weather already gone.
+        // Day 0 is 90% for six hours before dawn and 20% for the other 18.
+        // The daily field reports the 90% peak; the mean is the honest figure.
         expect(dailyResponse.daily.precipitation_probability_max[0]).toBe(90);
         expect(await block.getDailyForecast({DAILY_ITEM: "precipitation", DAY: 0, ZIP: "100-0001"}))
+            .toBe(38); // (6*90 + 18*20) / 24 = 37.5
+    });
+
+    test("gives the same answer whatever time of day it is asked", async () => {
+        const block = new blockClass(runtime);
+        const readAt = async iso => {
+            Date.now.mockReturnValue(Date.parse(iso));
+            return block.getDailyForecast({DAILY_ITEM: "precipitation", DAY: 0, ZIP: "100-0001"});
+        };
+        expect(await readAt("2026-06-15T00:00:00Z")).toBe(38); // 09:00 JST
+        expect(await readAt("2026-06-15T06:00:00Z")).toBe(38); // 15:00 JST
+        expect(await readAt("2026-06-15T11:00:00Z")).toBe(38); // 20:00 JST
+    });
+
+    test("falls back to the daily field when there are no hourly values", async () => {
+        const block = new blockClass(runtime);
+        const original = dailyResponse.hourly.precipitation_probability;
+        delete dailyResponse.hourly.precipitation_probability;
+        try {
+            expect(await block.getDailyForecast(
+                {DAILY_ITEM: "precipitation", DAY: 2, ZIP: "100-0001"}
+            )).toBe(80); // daily.precipitation_probability_max[2]
+        } finally {
+            dailyResponse.hourly.precipitation_probability = original;
+        }
+    });
+
+    test("returns the average precipitation probability for a later day", async () => {
+        const block = new blockClass(runtime);
+        // Every hour of day 2 sits at 20%, so the mean is 20 — while
+        // Open-Meteo's daily field for that day reports its 80% peak.
+        expect(dailyResponse.daily.precipitation_probability_max[2]).toBe(80);
+        expect(await block.getDailyForecast({DAILY_ITEM: "precipitation", DAY: 2, ZIP: "100-0001"}))
             .toBe(20);
-    });
-
-    test("uses the whole-day maximum for days that are still ahead", async () => {
-        const block = new blockClass(runtime);
-        expect(await block.getDailyForecast({DAILY_ITEM: "precipitation", DAY: 1, ZIP: "100-0001"}))
-            .toBe(20); // daily.precipitation_probability_max[1]
-    });
-
-    test("returns max precipitation probability for a day", async () => {
-        const block = new blockClass(runtime);
-        const result = await block.getDailyForecast(
-            {DAILY_ITEM: "precipitation", DAY: 2, ZIP: "100-0001"}
-        );
-        expect(result).toBe(80);
     });
 
     test("returns precipitation amount in mm (including 0)", async () => {

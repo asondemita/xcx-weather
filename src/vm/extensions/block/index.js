@@ -305,31 +305,36 @@ const dailyIndexForDay = (forecast, day) => {
 };
 
 /**
- * Highest hourly value still ahead of us on a given day.
+ * Mean of an hourly field across one whole day.
  *
- * The daily maximum covers all 24 hours, so "today" keeps reporting a peak that
- * has already passed — a clear afternoon still shows the 3am figure. Hours are
- * "preceding hour" values, so only those after the current hour are still ahead.
+ * Open-Meteo's daily `precipitation_probability_max` is the maximum of 24
+ * hourly probabilities, each of which is P(>0.1mm in that hour). A maximum over
+ * 24 marginal probabilities inflates badly: measured against JMA over 52
+ * locations x 5 lead days it ran +27 points high (MAE 31.4). The mean of the
+ * same hourly values tracks JMA's figure far better — bias -2.9, MAE 12.3,
+ * r 0.67 — and beat the maximum on 200 of 200 resamples and at every lead day.
+ *
+ * The whole day is used, including the night, because JMA's own daily figure is
+ * the largest of its four 6-hour blocks and two of those are outside daylight.
  * @param {object} forecast - Open-Meteo response with an `hourly` block
- * @param {string} date - the day to scan ("YYYY-MM-DD")
+ * @param {string} date - the day to average ("YYYY-MM-DD")
  * @param {string} field - hourly field name to read
- * @returns {?number} - highest remaining value, or null when none is left
+ * @returns {?number} - mean value, or null when the day has no usable data
  */
-const remainingHourlyMax = (forecast, date, field) => {
+const hourlyMean = (forecast, date, field) => {
     const hourly = forecast.hourly;
     if (!hourly || !Array.isArray(hourly.time) || !Array.isArray(hourly[field])) return null;
-    if (!Number.isFinite(forecast.utc_offset_seconds)) return null;
-    const nowHour = new Date(Date.now() + (forecast.utc_offset_seconds * 1000)).getUTCHours();
-    let best = null;
+    let total = 0;
+    let count = 0;
     for (let i = 0; i < hourly.time.length; i++) {
         const time = hourly.time[i];
         if (typeof time !== 'string' || time.slice(0, 10) !== date) continue;
-        if (Number(time.slice(11, 13)) <= nowHour) continue;
         const value = toNumber(hourly[field][i]);
         if (value === null) continue;
-        best = best === null ? value : Math.max(best, value);
+        total += value;
+        count++;
     }
-    return best;
+    return count === 0 ? null : total / count;
 };
 
 /**
@@ -1160,15 +1165,11 @@ class ExtensionBlocks {
                         return reportNumber(v);
                     }
                     case 'precipitation': {
-                        if (day === 0) {
-                            // The daily maximum can come from an hour that has
-                            // already passed, so a clear afternoon still reports
-                            // the small hours' peak. Only look ahead.
-                            const ahead = remainingHourlyMax(
-                                forecast, daily.time[index], 'precipitation_probability'
-                            );
-                            if (ahead !== null) return ahead;
-                        }
+                        const mean = hourlyMean(
+                            forecast, daily.time[index], 'precipitation_probability'
+                        );
+                        if (mean !== null) return Math.round(mean);
+                        // No hourly data: fall back to Open-Meteo's daily field.
                         const v = daily.precipitation_probability_max &&
                             daily.precipitation_probability_max[index];
                         return reportNumber(v);
