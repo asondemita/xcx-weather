@@ -122,7 +122,90 @@ const WEATHER_CODE_JA = {
  */
 const weatherCodeToJa = code => {
     if (code === null || typeof code === 'undefined') return '';
-    return WEATHER_CODE_JA[code] || `不明(${code})`;
+    if (Object.prototype.hasOwnProperty.call(WEATHER_CODE_JA, code)) {
+        return WEATHER_CODE_JA[code];
+    }
+    // Only echo back something that is actually a code; an object or an array
+    // would otherwise be stringified into the label as "不明([object Object])".
+    return Number.isFinite(Number(code)) && String(code).trim() !== '' ?
+        `不明(${code})` :
+        '';
+};
+
+/**
+ * Hours (local time) that count as daytime when summarizing a day's weather.
+ * "明日の天気" means the daylight hours, not 3am.
+ * @type {number}
+ */
+const DAYTIME_START_HOUR = 6;
+
+/**
+ * Last daytime hour (inclusive). See DAYTIME_START_HOUR.
+ * @type {number}
+ */
+const DAYTIME_END_HOUR = 18;
+
+/**
+ * WMO codes that mean "no weather to report" (clear through overcast).
+ * @type {Array.<number>}
+ */
+const CLEAR_CODES = [0, 1, 2, 3];
+
+/**
+ * WMO codes too weak for a single hour of them to define a whole day: fog and
+ * plain drizzle. Anything else that precipitates counts as significant and is
+ * reported as soon as it appears, so a one-hour thunderstorm is never hidden.
+ * @type {Array.<number>}
+ */
+const LIGHT_CODES = [45, 48, 51, 53, 55];
+
+/**
+ * How many daytime hours a LIGHT_CODES condition must last before it is allowed
+ * to represent the day.
+ * @type {number}
+ */
+const LIGHT_MIN_HOURS = 2;
+
+/**
+ * Summarize one day from its hourly WMO codes.
+ *
+ * Open-Meteo's daily `weather_code` is the maximum over all 24 hours, so a
+ * single hour of pre-dawn drizzle labels an otherwise sunny day as 霧雨. This
+ * looks at daylight hours only, lets significant weather (rain, snow, thunder)
+ * win immediately, and requires fog/drizzle to persist before it counts.
+ * @param {Array.<string>} times - hourly ISO timestamps ("YYYY-MM-DDTHH:MM")
+ * @param {Array.<number>} codes - hourly WMO codes, parallel to `times`
+ * @param {string} date - the day to summarize ("YYYY-MM-DD")
+ * @returns {?number} - representative WMO code, or null when there is no data
+ */
+const summarizeDayWeather = (times, codes, date) => {
+    if (!Array.isArray(times) || !Array.isArray(codes)) return null;
+    const daytime = [];
+    for (let i = 0; i < times.length; i++) {
+        const time = times[i];
+        if (typeof time !== 'string' || time.slice(0, 10) !== date) continue;
+        const hour = Number(time.slice(11, 13));
+        if (!(hour >= DAYTIME_START_HOUR && hour <= DAYTIME_END_HOUR)) continue;
+        const code = Number(codes[i]);
+        if (!Number.isFinite(code)) continue;
+        daytime.push(code);
+    }
+    if (daytime.length === 0) return null;
+
+    const hoursOf = code => daytime.filter(c => c === code).length;
+    const significant = daytime.filter(code => {
+        if (CLEAR_CODES.indexOf(code) !== -1) return false;
+        if (LIGHT_CODES.indexOf(code) !== -1) return hoursOf(code) >= LIGHT_MIN_HOURS;
+        return true;
+    });
+    const clear = daytime.filter(code => CLEAR_CODES.indexOf(code) !== -1);
+    let pool = daytime;
+    if (significant.length > 0) {
+        pool = significant;
+    } else if (clear.length > 0) {
+        pool = clear;
+    }
+    return Math.max.apply(null, pool);
 };
 
 /**
@@ -675,6 +758,9 @@ class ExtensionBlocks {
             daily: 'weather_code,temperature_2m_max,temperature_2m_min,' +
                 'precipitation_probability_max,precipitation_sum,sunrise,sunset,' +
                 'sunshine_duration',
+            // The day's representative weather is derived from the hourly codes
+            // (see summarizeDayWeather); this rides along on the same request.
+            hourly: 'weather_code',
             timezone: 'Asia/Tokyo',
             forecast_days: String(WEEKLY_DAYS)
         });
@@ -830,6 +916,15 @@ class ExtensionBlocks {
                     if (day < 0 || day >= daily.time.length) return '';
                     switch (item) {
                     case 'weather': {
+                        const summary = forecast.hourly && summarizeDayWeather(
+                            forecast.hourly.time,
+                            forecast.hourly.weather_code,
+                            daily.time[day]
+                        );
+                        if (summary !== null && typeof summary !== 'undefined') {
+                            return weatherCodeToJa(summary);
+                        }
+                        // No hourly codes for that day: fall back to the daily field.
                         const v = daily.weather_code && daily.weather_code[day];
                         return weatherCodeToJa(v);
                     }
@@ -897,5 +992,6 @@ export {
     parseLooseNumber,
     computeWbgt,
     wbgtLevel,
-    windDirectionToJa
+    windDirectionToJa,
+    summarizeDayWeather
 };
