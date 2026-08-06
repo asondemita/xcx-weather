@@ -167,6 +167,31 @@ const LIGHT_CODES = [45, 48, 51, 53, 55];
 const LIGHT_MIN_HOURS = 2;
 
 /**
+ * Resolve the index into the daily arrays for "today + day", matching on the
+ * dates the API returned rather than trusting array position.
+ *
+ * A payload fetched just before local midnight stays cached for FORECAST_TTL,
+ * and from then on position 0 is *yesterday* — so `0日後` would quietly report
+ * yesterday's forecast. This is the same discipline `_indexForHoursAhead`
+ * already applies on the hourly side.
+ * @param {object} forecast - Open-Meteo daily response
+ * @param {number} day - days ahead of today (0 = today)
+ * @returns {number} - index into the daily arrays, or -1 when unavailable
+ */
+const dailyIndexForDay = (forecast, day) => {
+    const times = forecast.daily.time;
+    if (!Array.isArray(times)) return -1;
+    if (!Number.isFinite(forecast.utc_offset_seconds)) return -1;
+    const today = new Date(Date.now() + (forecast.utc_offset_seconds * 1000))
+        .toISOString()
+        .slice(0, 10);
+    const base = times.indexOf(today);
+    if (base < 0) return -1;
+    const index = base + day;
+    return (index >= 0 && index < times.length) ? index : -1;
+};
+
+/**
  * Summarize one day from its hourly WMO codes.
  *
  * Open-Meteo's daily `weather_code` is the maximum over all 24 hours, so a
@@ -781,7 +806,13 @@ class ExtensionBlocks {
      */
     _indexForHoursAhead (forecast, hours) {
         const times = forecast.hourly.time;
-        const offsetMs = (forecast.utc_offset_seconds || 0) * 1000;
+        // Guessing UTC when the offset is missing would silently shift every
+        // reading by 9 hours, and the tolerance check below cannot detect that
+        // because the whole array moves together. Report nothing instead.
+        if (!Number.isFinite(forecast.utc_offset_seconds)) {
+            return {index: 0, diffMs: Infinity};
+        }
+        const offsetMs = forecast.utc_offset_seconds * 1000;
         const targetMs = Date.now() + (hours * 60 * 60 * 1000);
         let bestIndex = 0;
         let bestDiff = Infinity;
@@ -903,9 +934,10 @@ class ExtensionBlocks {
     getDailyForecast (args) {
         const item = Cast.toString(args.DAILY_ITEM);
         const dayValue = parseLooseNumber(args.DAY);
-        const day = Math.round(dayValue);
         const zip = normalizeZip(args.ZIP);
-        if (!zip || Number.isNaN(dayValue)) return Promise.resolve('');
+        // Reject before rounding: Math.round(-0.4) is -0, and -0 < 0 is false.
+        if (!zip || Number.isNaN(dayValue) || dayValue < 0) return Promise.resolve('');
+        const day = Math.round(dayValue);
 
         return this._lookupLocation(zip)
             .then(location => {
@@ -913,40 +945,41 @@ class ExtensionBlocks {
                 return this._fetchDailyForecast(location).then(forecast => {
                     if (!forecast || !forecast.daily || !forecast.daily.time) return '';
                     const daily = forecast.daily;
-                    if (day < 0 || day >= daily.time.length) return '';
+                    const index = dailyIndexForDay(forecast, day);
+                    if (index < 0) return '';
                     switch (item) {
                     case 'weather': {
                         const summary = forecast.hourly && summarizeDayWeather(
                             forecast.hourly.time,
                             forecast.hourly.weather_code,
-                            daily.time[day]
+                            daily.time[index]
                         );
                         if (summary !== null && typeof summary !== 'undefined') {
                             return weatherCodeToJa(summary);
                         }
                         // No hourly codes for that day: fall back to the daily field.
-                        const v = daily.weather_code && daily.weather_code[day];
+                        const v = daily.weather_code && daily.weather_code[index];
                         return weatherCodeToJa(v);
                     }
                     case 'tempMax': {
-                        const v = daily.temperature_2m_max && daily.temperature_2m_max[day];
+                        const v = daily.temperature_2m_max && daily.temperature_2m_max[index];
                         return (v === null || typeof v === 'undefined') ? '' : v;
                     }
                     case 'tempMin': {
-                        const v = daily.temperature_2m_min && daily.temperature_2m_min[day];
+                        const v = daily.temperature_2m_min && daily.temperature_2m_min[index];
                         return (v === null || typeof v === 'undefined') ? '' : v;
                     }
                     case 'precipitation': {
                         const v = daily.precipitation_probability_max &&
-                            daily.precipitation_probability_max[day];
+                            daily.precipitation_probability_max[index];
                         return (v === null || typeof v === 'undefined') ? '' : v;
                     }
                     case 'precipAmount': {
-                        const v = daily.precipitation_sum && daily.precipitation_sum[day];
+                        const v = daily.precipitation_sum && daily.precipitation_sum[index];
                         return (v === null || typeof v === 'undefined') ? '' : v;
                     }
                     case 'sunshine': {
-                        const v = daily.sunshine_duration && daily.sunshine_duration[day];
+                        const v = daily.sunshine_duration && daily.sunshine_duration[index];
                         if (v === null || typeof v === 'undefined') return '';
                         // API returns seconds; report hours (e.g. 23400 -> 6.5).
                         return Math.round((v / 3600) * 10) / 10;
@@ -954,7 +987,7 @@ class ExtensionBlocks {
                     case 'sunrise':
                     case 'sunset': {
                         const series = item === 'sunrise' ? daily.sunrise : daily.sunset;
-                        const v = series && series[day];
+                        const v = series && series[index];
                         if (v === null || typeof v === 'undefined') return '';
                         // ISO8601 like "2026-06-15T04:25" -> "04:25".
                         return String(v).split('T')[1] || '';
