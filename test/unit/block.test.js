@@ -19,9 +19,10 @@ describe("summarizeDayWeather", () => {
         Object.keys(overrides || {}).forEach(h => (out[Number(h)] = overrides[h]));
         return out;
     };
-    // Overcast by default, so a rain code is believed unless a test says otherwise.
-    const day = (codes, clouds) =>
-        summarizeDayWeather(TIMES, codes, clouds || fill(100), "2026-06-15");
+    // Overcast and raining properly by default, so a rain code is believed
+    // unless a test says otherwise.
+    const day = (codes, clouds, rates) =>
+        summarizeDayWeather(TIMES, codes, clouds || fill(100), rates || fill(1), "2026-06-15");
 
     test("ignores rain outside daylight hours", () => {
         expect(day(fill(1, {0: 51, 1: 51, 2: 53, 3: 51, 4: 51, 22: 51, 23: 51}), fill(30)))
@@ -35,7 +36,18 @@ describe("summarizeDayWeather", () => {
 
     test("reports light rain once it lasts long enough under cloud", () => {
         expect(day(fill(1, {7: 51, 8: 51}))).toBe(51);
-        expect(day(fill(1, {10: 45, 11: 45, 12: 45}))).toBe(45);
+    });
+
+    test("reports fog on persistence alone, with no cloud floor", () => {
+        // Radiation fog forms on clear, calm nights, so requiring cloud would
+        // be exactly backwards.
+        expect(day(fill(1, {10: 45, 11: 45, 12: 45}), fill(5), fill(0))).toBe(45);
+    });
+
+    test("rejects a trace rate even under a cloudy sky", () => {
+        const codes = fill(1, {10: 51, 11: 51, 12: 53, 13: 53});
+        expect(day(codes, fill(95), fill(0.1))).toBe(3);
+        expect(day(codes, fill(95), fill(0.5))).toBe(53);
     });
 
     test("rejects light rain that the model's own cloud cover contradicts", () => {
@@ -73,14 +85,14 @@ describe("summarizeDayWeather", () => {
     });
 
     test("falls back to the codes when no cloud data is available", () => {
-        expect(summarizeDayWeather(TIMES, fill(0, {12: 3, 13: 3}), null, "2026-06-15")).toBe(3);
-        expect(summarizeDayWeather(TIMES, fill(0, {18: 3}), null, "2026-06-15")).toBe(0);
+        expect(summarizeDayWeather(TIMES, fill(0, {12: 3, 13: 3}), null, null, "2026-06-15")).toBe(3);
+        expect(summarizeDayWeather(TIMES, fill(0, {18: 3}), null, null, "2026-06-15")).toBe(0);
     });
 
     test("returns null when the day has no hourly data", () => {
-        expect(summarizeDayWeather(["2026-06-16T12:00"], [3], [50], "2026-06-15")).toBe(null);
-        expect(summarizeDayWeather([], [], [], "2026-06-15")).toBe(null);
-        expect(summarizeDayWeather(null, null, null, "2026-06-15")).toBe(null);
+        expect(summarizeDayWeather(["2026-06-16T12:00"], [3], [50], [1], "2026-06-15")).toBe(null);
+        expect(summarizeDayWeather([], [], [], [], "2026-06-15")).toBe(null);
+        expect(summarizeDayWeather(null, null, null, null, "2026-06-15")).toBe(null);
     });
 });
 
