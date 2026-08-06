@@ -388,6 +388,9 @@ describe("getDailyForecast", () => {
                 json: () => Promise.resolve(dailyResponse)
             });
         });
+        // The block resolves DAY against the dates in the payload, so "today"
+        // has to line up with DAILY_DATES[0]. 2026-06-15T09:00+09:00.
+        jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-15T00:00:00Z"));
     });
 
     afterEach(() => {
@@ -484,8 +487,49 @@ describe("getDailyForecast", () => {
 
     test("returns '' for a day outside the forecast window", async () => {
         const block = new blockClass(runtime);
-        const result = await block.getDailyForecast({DAILY_ITEM: "weather", DAY: 10, ZIP: "100-0001"});
-        expect(result).toBe("");
+        expect(await block.getDailyForecast({DAILY_ITEM: "weather", DAY: 7, ZIP: "100-0001"}))
+            .toBe("");
+        expect(await block.getDailyForecast({DAILY_ITEM: "weather", DAY: 10, ZIP: "100-0001"}))
+            .toBe("");
+    });
+
+    test("keeps DAY anchored to today when a cached payload outlives midnight", async () => {
+        const block = new blockClass(runtime);
+        // Warm the cache at 23:59 JST on 06-15, when the payload starts at 06-15.
+        Date.now.mockReturnValue(Date.parse("2026-06-15T14:59:00Z"));
+        expect(await block.getDailyForecast({DAILY_ITEM: "tempMax", DAY: 0, ZIP: "100-0001"}))
+            .toBe(28); // 06-15
+
+        // Midnight passes. The cached payload now starts at *yesterday*, so
+        // trusting array position would report 06-15 as "today".
+        Date.now.mockReturnValue(Date.parse("2026-06-15T15:01:00Z"));
+        expect(await block.getDailyForecast({DAILY_ITEM: "tempMax", DAY: 0, ZIP: "100-0001"}))
+            .toBe(29); // 06-16
+        expect(await block.getDailyForecast({DAILY_ITEM: "tempMax", DAY: 1, ZIP: "100-0001"}))
+            .toBe(25); // 06-17
+        // The last row of the stale payload is no longer a full week out.
+        expect(await block.getDailyForecast({DAILY_ITEM: "tempMax", DAY: 6, ZIP: "100-0001"}))
+            .toBe("");
+    });
+
+    test("returns '' when the payload has no timezone offset", async () => {
+        const block = new blockClass(runtime);
+        const original = dailyResponse.utc_offset_seconds;
+        delete dailyResponse.utc_offset_seconds;
+        try {
+            expect(await block.getDailyForecast({DAILY_ITEM: "tempMax", DAY: 0, ZIP: "100-0001"}))
+                .toBe("");
+        } finally {
+            dailyResponse.utc_offset_seconds = original;
+        }
+    });
+
+    test("returns '' for a negative day that rounds to zero", async () => {
+        const block = new blockClass(runtime);
+        expect(await block.getDailyForecast({DAILY_ITEM: "tempMax", DAY: -0.4, ZIP: "100-0001"}))
+            .toBe("");
+        expect(await block.getDailyForecast({DAILY_ITEM: "tempMax", DAY: -1, ZIP: "100-0001"}))
+            .toBe("");
     });
 
     test("accepts free-typed full-width day", async () => {
