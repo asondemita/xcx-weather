@@ -56,8 +56,9 @@ const FORECAST_API = 'https://api.open-meteo.com/v1/forecast';
 const FORECAST_TTL = 10 * 60 * 1000;
 
 /**
- * Number of forecast days requested from Open-Meteo. Must be large enough that
- * the largest HOUR_OPTIONS value (48h) always falls inside the returned window.
+ * Number of forecast days requested from Open-Meteo. The window starts at today
+ * 00:00 local time, so this reaches roughly three days past the current hour.
+ * Hours beyond it report an empty value.
  * @type {number}
  */
 const FORECAST_DAYS = 4;
@@ -188,11 +189,13 @@ const windDirectionToJa = deg => {
 
 /**
  * Tolerance (ms) for matching a requested hour to an available hourly data
- * point. The grid is hourly, so any in-window request is within 30 min; a wider
- * gap means the requested time is outside the forecast window.
+ * point. The grid is hourly, so any in-window request is within 30 min of a data
+ * point; a wider gap means the requested time is outside the forecast window.
+ * Anything larger would let times past the end of the window silently report the
+ * last available hour.
  * @type {number}
  */
-const HOUR_MATCH_TOLERANCE_MS = 60 * 60 * 1000;
+const HOUR_MATCH_TOLERANCE_MS = 30 * 60 * 1000;
 
 /**
  * Convert full-width ASCII characters (！-～) and the full-width space to their
