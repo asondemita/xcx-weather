@@ -91,6 +91,24 @@ describe("weatherCodeToJa", () => {
         expect(weatherCodeToJa(95)).toBe("雷雨");
     });
 
+    test("labels 51/53/55 by rain intensity rather than as 霧雨", () => {
+        // Open-Meteo derives these from mm/h, not from droplet size, so they are
+        // not 霧雨 in the Japanese sense. Measured medians: 0.10 / 0.60 / 1.10.
+        expect(weatherCodeToJa(51)).toBe("小雨");
+        expect(weatherCodeToJa(53)).toBe("弱い雨");
+        expect(weatherCodeToJa(55)).toBe("弱い雨（強め）");
+    });
+
+    test("describes an instantaneous sky without a forecast-period word", () => {
+        // 「時々」 is a period expression; code 2 is a single moment at 50-78% cloud.
+        expect(weatherCodeToJa(2)).toBe("晴れ（雲多め）");
+    });
+
+    test("does not assert hail, and puts the intensity on the thunderstorm", () => {
+        expect(weatherCodeToJa(96)).toBe("雷雨（ひょうの可能性）");
+        expect(weatherCodeToJa(99)).toBe("激しい雷雨（ひょうの可能性）");
+    });
+
     test("uses the WMO 4677 meaning for the fog and frozen codes", () => {
         // 48 is "depositing rime fog", i.e. a fog, not the rime deposit itself.
         expect(weatherCodeToJa(48)).toBe("着氷性の霧");
