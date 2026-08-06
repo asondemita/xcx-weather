@@ -867,14 +867,13 @@ describe("hostile API responses", () => {
         jest.restoreAllMocks();
     });
 
-    // A reporter must always hand Scratch a string or a number.
-    const assertRenderable = (label, value) => {
-        const ok = (typeof value === "string") ||
-            (typeof value === "number" && Number.isFinite(value));
-        if (!ok) {
-            throw new Error(`${label} returned ${typeof value} ${String(value)}`);
-        }
-    };
+    // A reporter must always hand Scratch a string or a finite number; describe
+    // whatever came back so a failure names the offending value.
+    const renderable = value => (
+        (typeof value === "string") || (typeof value === "number" && Number.isFinite(value)) ?
+            "renderable" :
+            `${typeof value} ${String(value)}`
+    );
 
     [
         ["objects", {}],
@@ -889,7 +888,7 @@ describe("hostile API responses", () => {
             const block = new blockClass(runtime);
             for (const item of HOURLY_ITEMS) {
                 const result = await block.getForecast({ITEM: item, HOURS: 0, ZIP: "100-0001"});
-                assertRenderable(`${item} with ${label}`, result);
+                expect(`${item}: ${renderable(result)}`).toBe(`${item}: renderable`);
             }
         });
     });
