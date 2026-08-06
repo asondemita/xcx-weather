@@ -178,7 +178,11 @@ const WIND_DIRECTIONS_JA = [
  */
 const windDirectionToJa = deg => {
     if (deg === null || typeof deg === 'undefined' || deg === '') return '';
-    const idx = Math.round(Number(deg) / 22.5);
+    const value = Number(deg);
+    // Without this guard a non-numeric value indexes the table with NaN and the
+    // block reports the string "undefined".
+    if (!Number.isFinite(value)) return '';
+    const idx = Math.round(value / 22.5);
     return WIND_DIRECTIONS_JA[((idx % 16) + 16) % 16];
 };
 
