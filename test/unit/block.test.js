@@ -463,6 +463,14 @@ describe("windDirectionToJa", () => {
         expect(windDirectionToJa(undefined)).toBe("");
         expect(windDirectionToJa("")).toBe("");
     });
+
+    test("returns '' for non-numeric values instead of the string 'undefined'", () => {
+        // NaN would index the compass table with NaN and leak `undefined`.
+        expect(windDirectionToJa("abc")).toBe("");
+        expect(windDirectionToJa(NaN)).toBe("");
+        expect(windDirectionToJa(Infinity)).toBe("");
+        expect(windDirectionToJa({})).toBe("");
+    });
 });
 
 describe("getInfo", () => {
