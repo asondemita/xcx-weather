@@ -5,8 +5,63 @@ import {
     parseLooseNumber,
     computeWbgt,
     wbgtLevel,
-    windDirectionToJa
+    windDirectionToJa,
+    summarizeDayWeather
 } from "../../src/vm/extensions/block/index.js";
+
+describe("summarizeDayWeather", () => {
+    // 24 hourly codes for "2026-06-15"; only 06:00-18:00 is looked at.
+    const day = codes => {
+        const times = [];
+        for (let h = 0; h < 24; h++) {
+            times.push(`2026-06-15T${String(h).padStart(2, "0")}:00`);
+        }
+        return summarizeDayWeather(times, codes, "2026-06-15");
+    };
+    const fill = (base, overrides) => {
+        const codes = new Array(24).fill(base);
+        Object.keys(overrides).forEach(h => (codes[Number(h)] = overrides[h]));
+        return codes;
+    };
+
+    test("ignores drizzle outside daylight hours", () => {
+        // Pre-dawn drizzle, sunny all day: Open-Meteo's daily code would say 53.
+        expect(day(fill(1, {0: 51, 1: 51, 2: 51, 3: 53, 4: 51, 22: 51, 23: 51}))).toBe(1);
+    });
+
+    test("ignores a single daytime hour of drizzle or fog", () => {
+        expect(day(fill(1, {7: 51}))).toBe(1);
+        expect(day(fill(1, {14: 45}))).toBe(1);
+    });
+
+    test("reports drizzle or fog once it lasts long enough", () => {
+        expect(day(fill(1, {7: 51, 8: 51}))).toBe(51);
+        expect(day(fill(1, {10: 45, 11: 45, 12: 45}))).toBe(45);
+    });
+
+    test("reports significant weather after a single hour", () => {
+        expect(day(fill(0, {12: 95}))).toBe(95); // 雷雨
+        expect(day(fill(1, {15: 63}))).toBe(63); // 雨
+        expect(day(fill(1, {9: 71}))).toBe(71); // 雪
+        expect(day(fill(1, {9: 80}))).toBe(80); // にわか雨
+        expect(day(fill(3, {9: 56}))).toBe(56); // 着氷性の霧雨 is not "light"
+    });
+
+    test("prefers the most severe significant code", () => {
+        expect(day(fill(1, {9: 51, 10: 51, 13: 95}))).toBe(95);
+    });
+
+    test("falls back to the cloudiest sky when nothing precipitates", () => {
+        expect(day(fill(0, {12: 3}))).toBe(3);
+        expect(day(new Array(24).fill(0))).toBe(0);
+    });
+
+    test("returns null when the day has no hourly data", () => {
+        expect(summarizeDayWeather(["2026-06-16T12:00"], [3], "2026-06-15")).toBe(null);
+        expect(summarizeDayWeather([], [], "2026-06-15")).toBe(null);
+        expect(summarizeDayWeather(null, null, "2026-06-15")).toBe(null);
+    });
+});
 
 describe("blockClass", () => {
     const runtime = {
@@ -261,13 +316,45 @@ describe("getDailyForecast", () => {
         formatMessage: msg => msg.default
     };
 
+    const DAILY_DATES = [
+        "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18",
+        "2026-06-19", "2026-06-20", "2026-06-21"
+    ];
+
+    // Hourly codes behind each day, as {all-day base, hour: override}. Only
+    // 06:00-18:00 is looked at. Day 0 is the case the daily field gets wrong:
+    // drizzle before dawn, clear all day -> daily says 53, the block says 快晴.
+    const HOURLY_BY_DAY = [
+        {base: 0, at: {0: 51, 1: 51, 2: 53, 3: 51, 4: 51}},
+        {base: 3, at: {}},
+        {base: 1, at: {13: 63, 14: 63}},
+        {base: 1, at: {}},
+        {base: 2, at: {}},
+        {base: 1, at: {12: 80}},
+        {base: 0, at: {15: 95}}
+    ];
+
+    const dailyHourly = () => {
+        const time = [];
+        const codes = [];
+        DAILY_DATES.forEach((date, d) => {
+            for (let h = 0; h < 24; h++) {
+                time.push(`${date}T${String(h).padStart(2, "0")}:00`);
+                const spec = HOURLY_BY_DAY[d];
+                codes.push(
+                    Object.prototype.hasOwnProperty.call(spec.at, h) ? spec.at[h] : spec.base
+                );
+            }
+        });
+        return {time: time, weather_code: codes};
+    };
+
     const dailyResponse = {
+        utc_offset_seconds: 32400,
+        hourly: dailyHourly(),
         daily: {
-            time: [
-                "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18",
-                "2026-06-19", "2026-06-20", "2026-06-21"
-            ],
-            weather_code: [0, 3, 63, 1, 2, 80, 95],
+            time: DAILY_DATES,
+            weather_code: [53, 3, 63, 1, 2, 80, 95],
             temperature_2m_max: [28, 29, 25, 30, 31, 27, 26],
             temperature_2m_min: [18, 19, 17, 20, 21, 16, 15],
             precipitation_probability_max: [0, 20, 80, 10, 5, 60, 90],
@@ -310,7 +397,46 @@ describe("getDailyForecast", () => {
     test("returns tomorrow's weather as a Japanese label", async () => {
         const block = new blockClass(runtime);
         const result = await block.getDailyForecast({DAILY_ITEM: "weather", DAY: 1, ZIP: "100-0001"});
-        expect(result).toBe("曇り"); // weather_code[1] === 3
+        expect(result).toBe("曇り"); // overcast through the whole daytime
+    });
+
+    test("summarizes the day from daylight hours, not the 24h maximum", async () => {
+        const block = new blockClass(runtime);
+        // Day 0 drizzles before dawn and is clear all day. Open-Meteo's daily
+        // weather_code is 53 (霧雨); the block must report the daytime instead.
+        expect(dailyResponse.daily.weather_code[0]).toBe(53);
+        expect(await block.getDailyForecast({DAILY_ITEM: "weather", DAY: 0, ZIP: "100-0001"}))
+            .toBe("快晴");
+    });
+
+    test("still reports short but significant weather", async () => {
+        const block = new blockClass(runtime);
+        // A single 15:00 hour of thunder must not be smoothed away.
+        expect(await block.getDailyForecast({DAILY_ITEM: "weather", DAY: 6, ZIP: "100-0001"}))
+            .toBe("雷雨");
+        expect(await block.getDailyForecast({DAILY_ITEM: "weather", DAY: 5, ZIP: "100-0001"}))
+            .toBe("にわか雨（弱）");
+    });
+
+    test("falls back to the daily code when hourly codes are missing", async () => {
+        const block = new blockClass(runtime);
+        const original = dailyResponse.hourly;
+        delete dailyResponse.hourly;
+        try {
+            expect(await block.getDailyForecast({DAILY_ITEM: "weather", DAY: 2, ZIP: "100-0001"}))
+                .toBe("雨"); // daily.weather_code[2] === 63
+        } finally {
+            dailyResponse.hourly = original;
+        }
+    });
+
+    test("asks for the hourly codes it needs to summarize a day", async () => {
+        const block = new blockClass(runtime);
+        await block.getDailyForecast({DAILY_ITEM: "weather", DAY: 1, ZIP: "100-0001"});
+        const dailyCall = global.fetch.mock.calls
+            .map(call => call[0])
+            .find(url => url.startsWith("https://api.open-meteo.com/"));
+        expect(dailyCall).toContain("hourly=weather_code");
     });
 
     test("returns today's highest and a later day's lowest temperature", async () => {
