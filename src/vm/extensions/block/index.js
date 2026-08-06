@@ -132,9 +132,13 @@ const WEATHER_CODE_JA = {
     3: '曇り',
     45: '霧',
     48: '着氷性の霧',
-    51: '霧雨（弱）',
-    53: '霧雨',
-    55: '霧雨（強）',
+    // Open-Meteo derives 51/53/55 purely from mm/h, not from droplet size, so
+    // they are not 霧雨 in the Japanese sense. Measured over 4,608 station-hours
+    // across Japan: 51 = 0.03-0.85 mm/h (median 0.10), 53 = 0.20-0.90 (0.60),
+    // 55 = 1.00-1.20 (1.10) — all 「小雨」/「弱い雨」 by JMA's wording.
+    51: '小雨',
+    53: '弱い雨',
+    55: '弱い雨（強め）',
     56: '着氷性の霧雨（弱）',
     57: '着氷性の霧雨（強）',
     61: '雨（弱）',
@@ -239,7 +243,7 @@ const dailyIndexForDay = (forecast, day) => {
  * Summarize one day from its hourly WMO codes.
  *
  * Open-Meteo's daily `weather_code` is the maximum over all 24 hours, so a
- * single hour of pre-dawn drizzle labels an otherwise sunny day as 霧雨. This
+ * single hour of pre-dawn drizzle labels an otherwise sunny day as rain. This
  * looks at daylight hours only, lets significant weather (rain, snow, thunder)
  * win immediately, and requires fog/drizzle to persist before it counts.
  * @param {Array.<string>} times - hourly ISO timestamps ("YYYY-MM-DDTHH:MM")
