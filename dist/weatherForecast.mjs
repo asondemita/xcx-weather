@@ -1232,6 +1232,60 @@ var skyFromCloudCover = function skyFromCloudCover(cloud) {
 };
 
 /**
+ * True when a reading meets a floor. A missing reading is never held against
+ * the hour — the check can only reject on evidence.
+ * @param {?number} value - reading, or null when unavailable
+ * @param {number} floor - minimum acceptable value
+ * @returns {boolean} - whether the reading passes
+ */
+var meetsFloor = function meetsFloor(value, floor) {
+  return value === null || value >= floor;
+};
+
+/**
+ * Whether an hour of light rain is solid enough to be stated outright.
+ * @param {number} code - WMO code for the hour
+ * @param {?number} cloud - cloud cover (%) for the hour
+ * @param {?number} rate - precipitation (mm/h) for the hour
+ * @returns {boolean} - false when the model is describing sub-grid, patchy rain
+ */
+var isSolidLightRain = function isSolidLightRain(code, cloud, rate) {
+  return meetsFloor(cloud, LIGHT_MIN_CLOUD) && meetsFloor(rate, LIGHT_MIN_RATE);
+};
+
+/**
+ * Compose 「<sky>所により<rain>」 for rain the model puts somewhere in the area
+ * rather than everywhere in it.
+ * @param {number} sky - clear-sky WMO code
+ * @param {number} code - the light-rain WMO code
+ * @returns {string} - Japanese label
+ */
+var patchyLabel = function patchyLabel(sky, code) {
+  return "".concat(weatherCodeToJa(sky), "\u6240\u306B\u3088\u308A").concat(weatherCodeToJa(code));
+};
+
+/**
+ * Describe a single hour, hedging light rain the model is reporting sub-grid.
+ *
+ * `cloud_cover` is an area fraction and `precipitation` a grid-cell mean, so a
+ * trace rate under an open sky means the rain is patchy within the cell, not
+ * that it is everywhere. Stated flatly at one point it is wrong about nine
+ * times in ten, so the sky is reported with a 「所により」 hedge instead.
+ * @param {*} code - WMO code for the hour
+ * @param {?number} cloud - cloud cover (%) for the hour
+ * @param {?number} rate - precipitation (mm/h) for the hour
+ * @returns {string} - Japanese label, or '' when there is no code
+ */
+var describeHourWeather = function describeHourWeather(code, cloud, rate) {
+  var numeric = toNumber(code);
+  if (numeric === null || LIGHT_CODES.indexOf(numeric) === -1) return weatherCodeToJa(code);
+  if (isSolidLightRain(numeric, cloud, rate) || cloud === null) {
+    return weatherCodeToJa(numeric);
+  }
+  return patchyLabel(skyFromCloudCover(cloud), numeric);
+};
+
+/**
  * Resolve the index into the daily arrays for "today + day", matching on the
  * dates the API returned rather than trusting array position.
  *
@@ -1345,14 +1399,10 @@ var summarizeDayWeather = function summarizeDayWeather(times, codes, clouds, rat
   var lasts = function lasts(entry) {
     return hoursOf(entry.code) >= LIGHT_MIN_HOURS;
   };
-  // A missing reading is never held against an hour.
-  var enough = function enough(value, floor) {
-    return value === null || value >= floor;
-  };
 
   // Light rain must last, and must be more than a trace under an open sky.
   var light = daytime.filter(function (entry) {
-    return LIGHT_CODES.indexOf(entry.code) !== -1 && lasts(entry) && enough(entry.cloud, LIGHT_MIN_CLOUD) && enough(entry.rate, LIGHT_MIN_RATE);
+    return LIGHT_CODES.indexOf(entry.code) !== -1 && lasts(entry) && isSolidLightRain(entry.code, entry.cloud, entry.rate);
   }).map(function (entry) {
     return entry.code;
   });
@@ -1914,7 +1964,7 @@ var ExtensionBlocks = /*#__PURE__*/function () {
       var params = new URLSearchParams({
         latitude: String(location.latitude),
         longitude: String(location.longitude),
-        hourly: 'temperature_2m,relative_humidity_2m,pressure_msl,' + 'precipitation_probability,precipitation,weather_code,' + 'wind_speed_10m,wind_direction_10m,shortwave_radiation,uv_index',
+        hourly: 'temperature_2m,relative_humidity_2m,pressure_msl,' + 'precipitation_probability,precipitation,weather_code,cloud_cover,' + 'wind_speed_10m,wind_direction_10m,shortwave_radiation,uv_index',
         wind_speed_unit: 'ms',
         timezone: 'Asia/Tokyo',
         forecast_days: String(FORECAST_DAYS)
@@ -2061,7 +2111,7 @@ var ExtensionBlocks = /*#__PURE__*/function () {
             case 'weather':
               {
                 var _v8 = hourly.weather_code && hourly.weather_code[i];
-                return weatherCodeToJa(_v8);
+                return describeHourWeather(_v8, toNumber(hourly.cloud_cover && hourly.cloud_cover[i]), toNumber(hourly.precipitation && hourly.precipitation[i]));
               }
             case 'wbgt':
             case 'wbgtLevel':
@@ -2124,7 +2174,7 @@ var ExtensionBlocks = /*#__PURE__*/function () {
               {
                 var summary = forecast.hourly && summarizeDayWeather(forecast.hourly.time, forecast.hourly.weather_code, forecast.hourly.cloud_cover, forecast.hourly.precipitation, daily.time[index]);
                 if (summary !== null && typeof summary !== 'undefined') {
-                  return _typeof(summary) === 'object' ? "".concat(weatherCodeToJa(summary.sky), "\u6240\u306B\u3088\u308A").concat(weatherCodeToJa(summary.patchy)) : weatherCodeToJa(summary);
+                  return _typeof(summary) === 'object' ? patchyLabel(summary.sky, summary.patchy) : weatherCodeToJa(summary);
                 }
                 // No hourly codes for that day: fall back to the daily field.
                 var v = daily.weather_code && daily.weather_code[index];

@@ -231,6 +231,7 @@ describe("getForecast", () => {
             precipitation_probability: [10, 30, 60],
             precipitation: [0, 0.5, 3.2],
             weather_code: [0, 3, 63],
+            cloud_cover: [5, 90, 95],
             wind_speed_10m: [1.5, 2.0, 3.2],
             wind_direction_10m: [0, 90, 45],
             shortwave_radiation: [0, 200, 800],
@@ -304,6 +305,47 @@ describe("getForecast", () => {
         expect(await block.getForecast({ITEM: "winddir", HOURS: 0, ZIP: "100-0001"})).toBe("北");
         expect(await block.getForecast({ITEM: "winddir", HOURS: 1, ZIP: "100-0001"})).toBe("東");
         expect(await block.getForecast({ITEM: "winddir", HOURS: 2, ZIP: "100-0001"})).toBe("北東");
+    });
+
+    test("hedges light rain the model is reporting sub-grid", async () => {
+        const block = new blockClass(runtime);
+        const hour = {...forecastResponse.hourly};
+        try {
+            // Trace rain under a mostly open sky: patchy within the grid cell,
+            // and wrong about nine times in ten if stated flatly at one point.
+            forecastResponse.hourly = {
+                ...hour, weather_code: [51], cloud_cover: [30], precipitation: [0.1],
+                time: ["2026-06-07T12:00"]
+            };
+            expect(await block.getForecast({ITEM: "weather", HOURS: 0, ZIP: "100-0001"}))
+                .toBe("晴れ所により小雨");
+
+            // Same code with a real rate under a cloudy sky is stated outright.
+            forecastResponse.hourly = {
+                ...hour, weather_code: [51], cloud_cover: [95], precipitation: [0.5],
+                time: ["2026-06-07T12:00"]
+            };
+            expect(await block.getForecast({ITEM: "weather", HOURS: 0, ZIP: "100-0001"}))
+                .toBe("小雨");
+
+            // Heavier codes are never hedged.
+            forecastResponse.hourly = {
+                ...hour, weather_code: [95], cloud_cover: [20], precipitation: [0.1],
+                time: ["2026-06-07T12:00"]
+            };
+            expect(await block.getForecast({ITEM: "weather", HOURS: 0, ZIP: "100-0001"}))
+                .toBe("雷雨");
+
+            // With no cloud reading there is nothing to hedge with.
+            forecastResponse.hourly = {
+                ...hour, weather_code: [51], precipitation: [0.1],
+                cloud_cover: undefined, time: ["2026-06-07T12:00"]
+            };
+            expect(await block.getForecast({ITEM: "weather", HOURS: 0, ZIP: "100-0001"}))
+                .toBe("小雨");
+        } finally {
+            forecastResponse.hourly = hour;
+        }
     });
 
     test("returns '' for invalid postal code", async () => {
