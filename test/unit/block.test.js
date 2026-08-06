@@ -747,6 +747,134 @@ describe("failure caching", () => {
     });
 });
 
+describe("hostile API responses", () => {
+    const runtime = {
+        formatMessage: msg => msg.default
+    };
+
+    const hourlyOf = values => ({
+        utc_offset_seconds: 32400,
+        hourly: {
+            time: ["2026-06-15T12:00"],
+            temperature_2m: [values],
+            relative_humidity_2m: [values],
+            pressure_msl: [values],
+            precipitation_probability: [values],
+            precipitation: [values],
+            weather_code: [values],
+            wind_speed_10m: [values],
+            wind_direction_10m: [values],
+            shortwave_radiation: [values],
+            uv_index: [values]
+        }
+    });
+
+    const HOURLY_ITEMS = [
+        "weather", "temperature", "humidity", "pressure", "precipitation",
+        "precipAmount", "windspeed", "winddir", "wbgt", "wbgtLevel", "uvIndex"
+    ];
+
+    let payload;
+
+    beforeEach(() => {
+        jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-15T03:00:00Z"));
+        global.fetch = jest.fn(url => {
+            if (url.startsWith("https://geoapi.heartrails.com/")) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        response: {location: [{y: "35.68", x: "139.76"}]}
+                    })
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve(payload)});
+        });
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    // A reporter must always hand Scratch a string or a number.
+    const assertRenderable = (label, value) => {
+        const ok = (typeof value === "string") ||
+            (typeof value === "number" && Number.isFinite(value));
+        if (!ok) {
+            throw new Error(`${label} returned ${typeof value} ${String(value)}`);
+        }
+    };
+
+    [
+        ["objects", {}],
+        ["arrays", []],
+        ["booleans", true],
+        ["non-numeric strings", "n/a"],
+        ["empty strings", ""],
+        ["nulls", null]
+    ].forEach(([label, value]) => {
+        test(`never returns NaN or a raw object when fields are ${label}`, async () => {
+            payload = hourlyOf(value);
+            const block = new blockClass(runtime);
+            for (const item of HOURLY_ITEMS) {
+                const result = await block.getForecast({ITEM: item, HOURS: 0, ZIP: "100-0001"});
+                assertRenderable(`${item} with ${label}`, result);
+            }
+        });
+    });
+
+    test("reports '' rather than a 9-hour-shifted reading when the offset is missing", async () => {
+        payload = hourlyOf(20);
+        delete payload.utc_offset_seconds;
+        const block = new blockClass(runtime);
+        expect(await block.getForecast({ITEM: "temperature", HOURS: 0, ZIP: "100-0001"}))
+            .toBe("");
+    });
+
+    test("accepts numeric strings from the API as numbers", async () => {
+        payload = hourlyOf("21.5");
+        const block = new blockClass(runtime);
+        expect(await block.getForecast({ITEM: "temperature", HOURS: 0, ZIP: "100-0001"}))
+            .toBe(21.5);
+    });
+});
+
+describe("postal-code coordinates", () => {
+    const runtime = {
+        formatMessage: msg => msg.default
+    };
+
+    const lookupWith = place => {
+        global.fetch = jest.fn(() => Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({response: {location: [place]}})
+        }));
+        return new blockClass(runtime);
+    };
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    test("rejects blank coordinates instead of forecasting lat 0 / lon 0", async () => {
+        for (const blank of ["", " ", null, false, []]) {
+            const block = lookupWith({y: blank, x: blank, prefecture: "東京都", city: "千代田区"});
+            expect(await block.getPlaceName({ZIP: "100-0001"})).toBe("");
+        }
+    });
+
+    test("rejects coordinates outside Japan", async () => {
+        const block = lookupWith({y: "0", x: "0", prefecture: "東京都", city: "千代田区"});
+        expect(await block.getPlaceName({ZIP: "100-0001"})).toBe("");
+    });
+
+    test("accepts a normal Japanese coordinate", async () => {
+        const block = lookupWith({
+            y: "35.684473", x: "139.753336", prefecture: "東京都", city: "千代田区"
+        });
+        expect(await block.getPlaceName({ZIP: "100-0001"})).toBe("東京都千代田区");
+    });
+});
+
 describe("windDirectionToJa", () => {
     test("maps degrees to 16-point compass labels", () => {
         expect(windDirectionToJa(0)).toBe("北");
