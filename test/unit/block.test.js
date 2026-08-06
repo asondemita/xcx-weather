@@ -29,6 +29,13 @@ describe("weatherCodeToJa", () => {
         expect(weatherCodeToJa(95)).toBe("雷雨");
     });
 
+    test("uses the WMO 4677 meaning for the fog and frozen codes", () => {
+        // 48 is "depositing rime fog", i.e. a fog, not the rime deposit itself.
+        expect(weatherCodeToJa(48)).toBe("着氷性の霧");
+        // 77 is "snow grains"; 細氷 (diamond dust) is 76, a different phenomenon.
+        expect(weatherCodeToJa(77)).toBe("霧雪");
+    });
+
     test("handles unknown / empty codes", () => {
         expect(weatherCodeToJa(123)).toBe("不明(123)");
         expect(weatherCodeToJa(null)).toBe("");
