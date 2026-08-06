@@ -68,10 +68,6 @@ var entry = {
   translationMap: translations$1
 };
 
-function _classCallCheck(a, n) {
-  if (!(a instanceof n)) throw new TypeError("Cannot call a class as a function");
-}
-
 function _typeof(o) {
   "@babel/helpers - typeof";
 
@@ -80,6 +76,10 @@ function _typeof(o) {
   } : function (o) {
     return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o;
   }, _typeof(o);
+}
+
+function _classCallCheck(a, n) {
+  if (!(a instanceof n)) throw new TypeError("Cannot call a class as a function");
 }
 
 function toPrimitive(t, r) {
@@ -1181,14 +1181,21 @@ var LIGHT_MIN_CLOUD = 50;
 var LIGHT_MIN_RATE = 0.3;
 
 /**
- * Cloud cover (%) upper bounds for each clear-sky WMO code, following JMA's
- * definitions (快晴 = 雲量1以下, 曇り = 雲量9以上).
+ * Cloud cover (%) upper bounds used to describe a day's sky.
+ *
+ * The 15% and 85% edges come from JMA's definitions (快晴 = 雲量1以下,
+ * 曇り = 雲量9以上); the 50% edge does not — JMA's 晴れ spans 雲量2-8, i.e.
+ * 20-80%, so the 晴れ/晴れ（雲多め）split is this extension's own convention.
+ * Note also that JMA's 雲量 is an observer's whole-sky estimate while
+ * `cloud_cover` is a model column fraction over a grid box: reusing the numbers
+ * is a rough convention, not an identity.
+ *
+ * 快晴 is deliberately absent. JMA's glossary says of it 「予報文には用いない」,
+ * so a *forecast* should not use the word — the hourly block still reports it,
+ * because there it describes one moment rather than summarizing a day.
  * @type {Array.<{maxCloud: number, code: number}>}
  */
 var SKY_BY_CLOUD = [{
-  maxCloud: 15,
-  code: 0
-}, {
   maxCloud: 50,
   code: 1
 }, {
@@ -1279,7 +1286,8 @@ var hourlyMean = function hourlyMean(forecast, date, field) {
  * @param {Array.<number>} clouds - hourly cloud cover (%), parallel to `times`
  * @param {Array.<number>} rates - hourly precipitation (mm/h), parallel to `times`
  * @param {string} date - the day to summarize ("YYYY-MM-DD")
- * @returns {?number} - representative WMO code, or null when there is no data
+ * @returns {(number|{sky: number, patchy: number}|null)} - a WMO code, or a sky
+ *     code plus the light rain the model wants somewhere in the area, or null
  */
 var summarizeDayWeather = function summarizeDayWeather(times, codes, clouds, rates, date) {
   if (!Array.isArray(times) || !Array.isArray(codes)) return null;
@@ -1335,8 +1343,19 @@ var summarizeDayWeather = function summarizeDayWeather(times, codes, clouds, rat
   var reported = significant.concat(light, fog);
   if (reported.length > 0) return Math.max.apply(null, reported);
 
-  // Nothing precipitating: describe the sky from the average cloud cover,
-  // which also covers the hours whose light-rain code was just rejected.
+  // Light rain that lasted but was rejected for being a trace under an open
+  // sky. The model is saying the rain is sub-grid — patchy in space, not
+  // absent — and observations back that: of the days this rejection turns
+  // from rainy to dry, about a quarter saw rain within 20 km. Reporting a
+  // plain 晴れ would be a stronger claim than the data supports, so the sky
+  // carries a 「所により」 hedge instead.
+  var patchy = daytime.filter(function (entry) {
+    return LIGHT_CODES.indexOf(entry.code) !== -1 && lasts(entry);
+  }).map(function (entry) {
+    return entry.code;
+  });
+
+  // Otherwise describe the sky from the average cloud cover.
   var measured = daytime.filter(function (entry) {
     return entry.cloud !== null;
   });
@@ -1344,7 +1363,11 @@ var summarizeDayWeather = function summarizeDayWeather(times, codes, clouds, rat
     var mean = measured.reduce(function (sum, entry) {
       return sum + entry.cloud;
     }, 0) / measured.length;
-    return skyFromCloudCover(mean);
+    var sky = skyFromCloudCover(mean);
+    return patchy.length > 0 ? {
+      sky: sky,
+      patchy: Math.max.apply(null, patchy)
+    } : sky;
   }
   // No cloud data at all: fall back to the most overcast code that lasted.
   var clear = daytime.map(function (entry) {
@@ -2079,7 +2102,7 @@ var ExtensionBlocks = /*#__PURE__*/function () {
               {
                 var summary = forecast.hourly && summarizeDayWeather(forecast.hourly.time, forecast.hourly.weather_code, forecast.hourly.cloud_cover, forecast.hourly.precipitation, daily.time[index]);
                 if (summary !== null && typeof summary !== 'undefined') {
-                  return weatherCodeToJa(summary);
+                  return _typeof(summary) === 'object' ? "".concat(weatherCodeToJa(summary.sky), "\u6240\u306B\u3088\u308A").concat(weatherCodeToJa(summary.patchy)) : weatherCodeToJa(summary);
                 }
                 // No hourly codes for that day: fall back to the daily field.
                 var v = daily.weather_code && daily.weather_code[index];
