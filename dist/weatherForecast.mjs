@@ -1414,7 +1414,10 @@ var HOUR_MATCH_TOLERANCE_MS = 30 * 60 * 1000;
 var toHalfWidth = function toHalfWidth(raw) {
   return String(raw).replace(/[！-～]/g, function (c) {
     return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
-  }).replace(/　/g, ' ');
+  })
+  // The literal U+3000 is the whole point of this line, so the rule cannot apply.
+  // eslint-disable-next-line no-irregular-whitespace
+  .replace(/　/g, ' ');
 };
 
 /**
@@ -1454,8 +1457,10 @@ var readCache = function readCache(cache, key) {
 
 /**
  * Store an in-flight request, shortening its lifetime if it turns out to have
- * failed. Concurrent callers still share the single in-flight promise, so a
- * block used inside a `forever` loop issues at most one request per TTL.
+ * failed. Concurrent callers share the single in-flight promise, so a block used
+ * inside a `forever` loop normally issues one request per TTL. The TTL is
+ * measured from the request's start, so a request that outlives it can be joined
+ * by a second one — rare, and harmless beyond the extra call.
  * @param {object.<string, {data: Promise<?object>, expiresAt: number}>} cache - cache to write
  * @param {string} key - cache key
  * @param {Promise<?object>} request - in-flight request, which resolves to null on failure
@@ -1492,6 +1497,153 @@ var normalizeZip = function normalizeZip(raw) {
   var digits = toHalfWidth(raw).replace(/[^0-9]/g, '');
   if (digits.length !== 7) return null;
   return "".concat(digits.slice(0, 3), "-").concat(digits.slice(3));
+};
+
+/**
+ * Items offered by the hourly block's dropdown, in display order.
+ * @type {Array.<{id: string, default: string, description: string, value: string}>}
+ */
+var ITEM_MENU = [{
+  id: 'weatherForecast.item.weather',
+  default: 'weather',
+  description: 'weather menu item',
+  value: 'weather'
+}, {
+  id: 'weatherForecast.item.temperature',
+  default: 'temperature',
+  description: 'temperature menu item',
+  value: 'temperature'
+}, {
+  id: 'weatherForecast.item.humidity',
+  default: 'humidity',
+  description: 'relative humidity menu item',
+  value: 'humidity'
+}, {
+  id: 'weatherForecast.item.pressure',
+  default: 'pressure',
+  description: 'sea-level pressure menu item',
+  value: 'pressure'
+}, {
+  id: 'weatherForecast.item.precipitation',
+  default: 'precipitation probability',
+  description: 'precipitation probability menu item',
+  value: 'precipitation'
+}, {
+  id: 'weatherForecast.item.precipAmount',
+  default: 'precipitation amount',
+  description: 'precipitation amount menu item',
+  value: 'precipAmount'
+}, {
+  id: 'weatherForecast.item.windspeed',
+  default: 'wind speed',
+  description: 'wind speed menu item',
+  value: 'windspeed'
+}, {
+  id: 'weatherForecast.item.winddir',
+  default: 'wind direction',
+  description: 'wind direction menu item',
+  value: 'winddir'
+}, {
+  id: 'weatherForecast.item.wbgt',
+  default: 'heat index (WBGT)',
+  description: 'WBGT value menu item',
+  value: 'wbgt'
+}, {
+  id: 'weatherForecast.item.wbgtLevel',
+  default: 'heat risk level (WBGT)',
+  description: 'WBGT danger level menu item',
+  value: 'wbgtLevel'
+}, {
+  id: 'weatherForecast.item.uvIndex',
+  default: 'UV index',
+  description: 'UV index menu item',
+  value: 'uvIndex'
+}];
+
+/**
+ * Items offered by the weekly block's dropdown, in display order.
+ * @type {Array.<{id: string, default: string, description: string, value: string}>}
+ */
+var DAILY_ITEM_MENU = [{
+  id: 'weatherForecast.daily.weather',
+  default: 'weather',
+  description: 'daily weather menu item',
+  value: 'weather'
+}, {
+  id: 'weatherForecast.daily.tempMax',
+  default: 'highest temperature',
+  description: 'daily max temperature menu item',
+  value: 'tempMax'
+}, {
+  id: 'weatherForecast.daily.tempMin',
+  default: 'lowest temperature',
+  description: 'daily min temperature menu item',
+  value: 'tempMin'
+}, {
+  id: 'weatherForecast.daily.precipitation',
+  default: 'precipitation probability',
+  description: 'daily precipitation probability menu item',
+  value: 'precipitation'
+}, {
+  id: 'weatherForecast.daily.precipAmount',
+  default: 'precipitation amount',
+  description: 'daily precipitation amount menu item',
+  value: 'precipAmount'
+}, {
+  id: 'weatherForecast.daily.sunrise',
+  default: 'sunrise',
+  description: 'daily sunrise time menu item',
+  value: 'sunrise'
+}, {
+  id: 'weatherForecast.daily.sunset',
+  default: 'sunset',
+  description: 'daily sunset time menu item',
+  value: 'sunset'
+}, {
+  id: 'weatherForecast.daily.sunshine',
+  default: 'sunshine duration',
+  description: 'daily sunshine duration menu item',
+  value: 'sunshine'
+}];
+
+/**
+ * Build a Scratch menu from descriptors, translating each label.
+ * @param {Array.<object>} descriptors - menu descriptors
+ * @returns {object} - menu definition for getInfo
+ */
+var buildMenu = function buildMenu(descriptors) {
+  return {
+    acceptReporters: true,
+    items: descriptors.map(function (descriptor) {
+      return {
+        text: formatMessage(descriptor),
+        value: descriptor.value
+      };
+    })
+  };
+};
+
+/**
+ * Resolve whatever arrived in a menu slot to one of its values.
+ *
+ * The menus set `acceptReporters`, so a reporter block can be dropped in — and
+ * what it supplies is usually the label the user can see (「気温」), not the
+ * internal value. Accept the label in any locale, and tolerate the stray
+ * whitespace that `join` blocks tend to leave behind.
+ * @param {Array.<object>} descriptors - menu descriptors
+ * @param {string} raw - the value the block received
+ * @returns {string} - a menu value, or the input unchanged when nothing matches
+ */
+var resolveMenuValue = function resolveMenuValue(descriptors, raw) {
+  var text = String(raw).trim();
+  var match = descriptors.find(function (descriptor) {
+    if (descriptor.value === text) return true;
+    if (formatMessage(descriptor) === text) return true;
+    return Object.keys(translations).some(function (locale) {
+      return translations[locale][descriptor.id] === text;
+    });
+  });
+  return match ? match.value : raw;
 };
 
 /**
@@ -1614,147 +1766,8 @@ var ExtensionBlocks = /*#__PURE__*/function () {
           }
         }],
         menus: {
-          itemMenu: {
-            acceptReporters: true,
-            items: [{
-              text: formatMessage({
-                id: 'weatherForecast.item.weather',
-                default: 'weather',
-                description: 'weather menu item'
-              }),
-              value: 'weather'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.item.temperature',
-                default: 'temperature',
-                description: 'temperature menu item'
-              }),
-              value: 'temperature'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.item.humidity',
-                default: 'humidity',
-                description: 'relative humidity menu item'
-              }),
-              value: 'humidity'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.item.pressure',
-                default: 'pressure',
-                description: 'sea-level pressure menu item'
-              }),
-              value: 'pressure'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.item.precipitation',
-                default: 'precipitation probability',
-                description: 'precipitation probability menu item'
-              }),
-              value: 'precipitation'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.item.precipAmount',
-                default: 'precipitation amount',
-                description: 'precipitation amount menu item'
-              }),
-              value: 'precipAmount'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.item.windspeed',
-                default: 'wind speed',
-                description: 'wind speed menu item'
-              }),
-              value: 'windspeed'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.item.winddir',
-                default: 'wind direction',
-                description: 'wind direction menu item'
-              }),
-              value: 'winddir'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.item.wbgt',
-                default: 'heat index (WBGT)',
-                description: 'WBGT value menu item'
-              }),
-              value: 'wbgt'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.item.wbgtLevel',
-                default: 'heat risk level (WBGT)',
-                description: 'WBGT danger level menu item'
-              }),
-              value: 'wbgtLevel'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.item.uvIndex',
-                default: 'UV index',
-                description: 'UV index menu item'
-              }),
-              value: 'uvIndex'
-            }]
-          },
-          dailyItemMenu: {
-            acceptReporters: true,
-            items: [{
-              text: formatMessage({
-                id: 'weatherForecast.daily.weather',
-                default: 'weather',
-                description: 'daily weather menu item'
-              }),
-              value: 'weather'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.daily.tempMax',
-                default: 'highest temperature',
-                description: 'daily max temperature menu item'
-              }),
-              value: 'tempMax'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.daily.tempMin',
-                default: 'lowest temperature',
-                description: 'daily min temperature menu item'
-              }),
-              value: 'tempMin'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.daily.precipitation',
-                default: 'precipitation probability',
-                description: 'daily precipitation probability menu item'
-              }),
-              value: 'precipitation'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.daily.precipAmount',
-                default: 'precipitation amount',
-                description: 'daily precipitation amount menu item'
-              }),
-              value: 'precipAmount'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.daily.sunrise',
-                default: 'sunrise',
-                description: 'daily sunrise time menu item'
-              }),
-              value: 'sunrise'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.daily.sunset',
-                default: 'sunset',
-                description: 'daily sunset time menu item'
-              }),
-              value: 'sunset'
-            }, {
-              text: formatMessage({
-                id: 'weatherForecast.daily.sunshine',
-                default: 'sunshine duration',
-                description: 'daily sunshine duration menu item'
-              }),
-              value: 'sunshine'
-            }]
-          }
+          itemMenu: buildMenu(ITEM_MENU),
+          dailyItemMenu: buildMenu(DAILY_ITEM_MENU)
         }
       };
     }
@@ -1901,7 +1914,7 @@ var ExtensionBlocks = /*#__PURE__*/function () {
     key: "getForecast",
     value: function getForecast(args) {
       var _this = this;
-      var item = Cast.toString(args.ITEM);
+      var item = resolveMenuValue(ITEM_MENU, Cast.toString(args.ITEM));
       var hours = parseLooseNumber(args.HOURS);
       var zip = normalizeZip(args.ZIP);
       // Reject non-numeric or past times; out-of-window times are caught below.
@@ -2004,7 +2017,7 @@ var ExtensionBlocks = /*#__PURE__*/function () {
     key: "getDailyForecast",
     value: function getDailyForecast(args) {
       var _this2 = this;
-      var item = Cast.toString(args.DAILY_ITEM);
+      var item = resolveMenuValue(DAILY_ITEM_MENU, Cast.toString(args.DAILY_ITEM));
       var dayValue = parseLooseNumber(args.DAY);
       var zip = normalizeZip(args.ZIP);
       // Reject before rounding: Math.round(-0.4) is -0, and -0 < 0 is false.

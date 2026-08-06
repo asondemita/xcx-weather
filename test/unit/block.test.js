@@ -819,6 +819,62 @@ describe("failure caching", () => {
     });
 });
 
+describe("menu slots fed by a reporter block", () => {
+    const runtime = {
+        formatMessage: msg => msg.default
+    };
+
+    const forecastResponse = {
+        utc_offset_seconds: 32400,
+        hourly: {
+            time: ["2026-06-07T12:00"],
+            temperature_2m: [20],
+            precipitation: [1.5]
+        }
+    };
+
+    beforeEach(() => {
+        jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-07T03:00:00Z"));
+        global.fetch = jest.fn(url => {
+            if (url.startsWith("https://geoapi.heartrails.com/")) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        response: {location: [{y: "35.68", x: "139.76"}]}
+                    })
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve(forecastResponse)});
+        });
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    // The menus set acceptReporters, so a reporter can be dropped in — and what
+    // it supplies is the visible label, not the internal value.
+    test("accepts the label the user can see, in any locale", async () => {
+        const block = new blockClass(runtime);
+        for (const label of ["temperature", "気温", "きおん"]) {
+            expect(await block.getForecast({ITEM: label, HOURS: 0, ZIP: "100-0001"}))
+                .toBe(20);
+        }
+    });
+
+    test("tolerates stray whitespace from join blocks", async () => {
+        const block = new blockClass(runtime);
+        expect(await block.getForecast({ITEM: " 降水量 ", HOURS: 0, ZIP: "100-0001"}))
+            .toBe(1.5);
+    });
+
+    test("still reports '' for something that is not a menu item", async () => {
+        const block = new blockClass(runtime);
+        expect(await block.getForecast({ITEM: "でたらめ", HOURS: 0, ZIP: "100-0001"}))
+            .toBe("");
+    });
+});
+
 describe("hostile API responses", () => {
     const runtime = {
         formatMessage: msg => msg.default
