@@ -480,6 +480,8 @@ const HOUR_MATCH_TOLERANCE_MS = 30 * 60 * 1000;
  */
 const toHalfWidth = raw => String(raw)
     .replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    // The literal U+3000 is the whole point of this line, so the rule cannot apply.
+    // eslint-disable-next-line no-irregular-whitespace
     .replace(/　/g, ' ');
 
 /**
