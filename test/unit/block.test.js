@@ -10,63 +10,77 @@ import {
 } from "../../src/vm/extensions/block/index.js";
 
 describe("summarizeDayWeather", () => {
-    // 24 hourly codes for "2026-06-15"; only 06:00-18:00 is looked at.
-    const day = codes => {
-        const times = [];
-        for (let h = 0; h < 24; h++) {
-            times.push(`2026-06-15T${String(h).padStart(2, "0")}:00`);
-        }
-        return summarizeDayWeather(times, codes, "2026-06-15");
-    };
+    const TIMES = [];
+    for (let h = 0; h < 24; h++) {
+        TIMES.push(`2026-06-15T${String(h).padStart(2, "0")}:00`);
+    }
     const fill = (base, overrides) => {
-        const codes = new Array(24).fill(base);
-        Object.keys(overrides).forEach(h => (codes[Number(h)] = overrides[h]));
-        return codes;
+        const out = new Array(24).fill(base);
+        Object.keys(overrides || {}).forEach(h => (out[Number(h)] = overrides[h]));
+        return out;
     };
+    // Overcast by default, so a rain code is believed unless a test says otherwise.
+    const day = (codes, clouds) =>
+        summarizeDayWeather(TIMES, codes, clouds || fill(100), "2026-06-15");
 
-    test("ignores drizzle outside daylight hours", () => {
-        // Pre-dawn drizzle, sunny all day: Open-Meteo's daily code would say 53.
-        expect(day(fill(1, {0: 51, 1: 51, 2: 51, 3: 53, 4: 51, 22: 51, 23: 51}))).toBe(1);
+    test("ignores rain outside daylight hours", () => {
+        expect(day(fill(1, {0: 51, 1: 51, 2: 53, 3: 51, 4: 51, 22: 51, 23: 51}), fill(30)))
+            .toBe(1);
     });
 
-    test("ignores a single daytime hour of drizzle or fog", () => {
-        expect(day(fill(1, {7: 51}))).toBe(1);
-        expect(day(fill(1, {14: 45}))).toBe(1);
+    test("ignores a single daytime hour of light rain or fog", () => {
+        expect(day(fill(1, {7: 51}), fill(30))).toBe(1);
+        expect(day(fill(1, {14: 45}), fill(30))).toBe(1);
     });
 
-    test("reports drizzle or fog once it lasts long enough", () => {
+    test("reports light rain once it lasts long enough under cloud", () => {
         expect(day(fill(1, {7: 51, 8: 51}))).toBe(51);
         expect(day(fill(1, {10: 45, 11: 45, 12: 45}))).toBe(45);
     });
 
-    test("reports significant weather after a single hour", () => {
-        expect(day(fill(0, {12: 95}))).toBe(95); // 雷雨
-        expect(day(fill(1, {15: 63}))).toBe(63); // 雨
-        expect(day(fill(1, {9: 71}))).toBe(71); // 雪
-        expect(day(fill(1, {9: 80}))).toBe(80); // にわか雨
-        expect(day(fill(3, {9: 56}))).toBe(56); // 着氷性の霧雨 is not "light"
+    test("rejects light rain that the model's own cloud cover contradicts", () => {
+        // Seven daytime hours flagged as light rain under a nearly clear sky:
+        // the model smeared convective rain across the cell, it is not real.
+        const codes = fill(1, {9: 51, 10: 51, 11: 53, 12: 53, 13: 53, 14: 51, 15: 51});
+        expect(day(codes, fill(20))).toBe(1);
+        // Same codes under a genuinely cloudy sky are believed.
+        expect(day(codes, fill(90))).toBe(53);
+    });
+
+    test("reports significant weather after a single hour, whatever the sky", () => {
+        expect(day(fill(0, {12: 95}), fill(10))).toBe(95); // 雷雨
+        expect(day(fill(1, {15: 63}), fill(10))).toBe(63); // 雨
+        expect(day(fill(1, {9: 71}), fill(10))).toBe(71); // 雪
+        expect(day(fill(1, {9: 80}), fill(10))).toBe(80); // にわか雨
+        expect(day(fill(3, {9: 56}), fill(10))).toBe(56); // 着氷性の霧雨
     });
 
     test("prefers the most severe significant code", () => {
         expect(day(fill(1, {9: 51, 10: 51, 13: 95}))).toBe(95);
     });
 
-    test("falls back to the cloudiest sky when nothing precipitates", () => {
-        expect(day(fill(0, {12: 3, 13: 3}))).toBe(3);
-        expect(day(new Array(24).fill(0))).toBe(0);
+    test("describes the sky from the average daytime cloud cover", () => {
+        // JMA's bands: 快晴 <15%, 晴れ <50%, 晴れ（雲多め）<85%, 曇り otherwise.
+        expect(day(fill(3), fill(5))).toBe(0);
+        expect(day(fill(0), fill(30))).toBe(1);
+        expect(day(fill(0), fill(70))).toBe(2);
+        expect(day(fill(0), fill(95))).toBe(3);
     });
 
-    test("ignores a single passing hour of cloud", () => {
-        // 12 clear daytime hours + one hour of (usually high) cloud is a clear
-        // day; Open-Meteo's daily code would call it 曇り.
-        expect(day(fill(0, {18: 3}))).toBe(0);
-        expect(day(fill(1, {12: 3}))).toBe(1);
+    test("is not swayed by a single overcast hour", () => {
+        // 12 clear daytime hours plus one hour of high cloud is a clear day.
+        expect(day(fill(0), fill(5, {18: 96}))).toBe(0);
+    });
+
+    test("falls back to the codes when no cloud data is available", () => {
+        expect(summarizeDayWeather(TIMES, fill(0, {12: 3, 13: 3}), null, "2026-06-15")).toBe(3);
+        expect(summarizeDayWeather(TIMES, fill(0, {18: 3}), null, "2026-06-15")).toBe(0);
     });
 
     test("returns null when the day has no hourly data", () => {
-        expect(summarizeDayWeather(["2026-06-16T12:00"], [3], "2026-06-15")).toBe(null);
-        expect(summarizeDayWeather([], [], "2026-06-15")).toBe(null);
-        expect(summarizeDayWeather(null, null, "2026-06-15")).toBe(null);
+        expect(summarizeDayWeather(["2026-06-16T12:00"], [3], [50], "2026-06-15")).toBe(null);
+        expect(summarizeDayWeather([], [], [], "2026-06-15")).toBe(null);
+        expect(summarizeDayWeather(null, null, null, "2026-06-15")).toBe(null);
     });
 });
 
@@ -359,19 +373,37 @@ describe("getDailyForecast", () => {
         {base: 0, at: {15: 95}}
     ];
 
+    // Cloud cover implied by each clear-sky code, so the summary agrees with the
+    // codes; precipitating hours get an overcast sky so the rain is believed.
+    const CLOUD_FOR_CODE = {0: 5, 1: 30, 2: 70, 3: 95};
+
     const dailyHourly = () => {
         const time = [];
         const codes = [];
+        const clouds = [];
+        const pops = [];
         DAILY_DATES.forEach((date, d) => {
             for (let h = 0; h < 24; h++) {
                 time.push(`${date}T${String(h).padStart(2, "0")}:00`);
                 const spec = HOURLY_BY_DAY[d];
-                codes.push(
-                    Object.prototype.hasOwnProperty.call(spec.at, h) ? spec.at[h] : spec.base
-                );
+                const code = Object.prototype.hasOwnProperty.call(spec.at, h) ?
+                    spec.at[h] :
+                    spec.base;
+                codes.push(code);
+                clouds.push(Object.prototype.hasOwnProperty.call(CLOUD_FOR_CODE, code) ?
+                    CLOUD_FOR_CODE[code] :
+                    95);
+                // Day 0 peaks before dawn and is quiet afterwards, so "today"
+                // must not keep reporting the small hours' figure.
+                pops.push(d === 0 && h < 6 ? 90 : 20);
             }
         });
-        return {time: time, weather_code: codes};
+        return {
+            time: time,
+            weather_code: codes,
+            cloud_cover: clouds,
+            precipitation_probability: pops
+        };
     };
 
     const dailyResponse = {
@@ -382,7 +414,7 @@ describe("getDailyForecast", () => {
             weather_code: [53, 3, 63, 1, 2, 80, 95],
             temperature_2m_max: [28, 29, 25, 30, 31, 27, 26],
             temperature_2m_min: [18, 19, 17, 20, 21, 16, 15],
-            precipitation_probability_max: [0, 20, 80, 10, 5, 60, 90],
+            precipitation_probability_max: [90, 20, 80, 10, 5, 60, 90],
             precipitation_sum: [0, 1.2, 25.4, 0.3, 0, 8, 40.5],
             sunshine_duration: [43200, 36000, 7200, 23400, 45000, 10800, 0],
             sunrise: [
@@ -473,6 +505,21 @@ describe("getDailyForecast", () => {
             .toBe(28);
         expect(await block.getDailyForecast({DAILY_ITEM: "tempMin", DAY: 2, ZIP: "100-0001"}))
             .toBe(17);
+    });
+
+    test("reports only the hours still ahead for today", async () => {
+        const block = new blockClass(runtime);
+        // Frozen at 09:00 JST. The day peaked at 90% before dawn, but the rest
+        // of the day is 20% — reporting 90% would describe weather already gone.
+        expect(dailyResponse.daily.precipitation_probability_max[0]).toBe(90);
+        expect(await block.getDailyForecast({DAILY_ITEM: "precipitation", DAY: 0, ZIP: "100-0001"}))
+            .toBe(20);
+    });
+
+    test("uses the whole-day maximum for days that are still ahead", async () => {
+        const block = new blockClass(runtime);
+        expect(await block.getDailyForecast({DAILY_ITEM: "precipitation", DAY: 1, ZIP: "100-0001"}))
+            .toBe(20); // daily.precipitation_probability_max[1]
     });
 
     test("returns max precipitation probability for a day", async () => {
