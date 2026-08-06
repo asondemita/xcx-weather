@@ -44,18 +44,19 @@ describe("summarizeDayWeather", () => {
         expect(day(fill(1, {10: 45, 11: 45, 12: 45}), fill(5), fill(0))).toBe(45);
     });
 
-    test("rejects a trace rate even under a cloudy sky", () => {
+    test("does not call the day rainy on a trace rate alone", () => {
         const codes = fill(1, {10: 51, 11: 51, 12: 53, 13: 53});
-        expect(day(codes, fill(95), fill(0.1))).toBe(3);
+        expect(day(codes, fill(95), fill(0.1))).toEqual({sky: 3, patchy: 53});
         expect(day(codes, fill(95), fill(0.5))).toBe(53);
     });
 
-    test("rejects light rain that the model's own cloud cover contradicts", () => {
+    test("does not call the day rainy when the sky is open", () => {
         // Seven daytime hours flagged as light rain under a nearly clear sky:
-        // the model smeared convective rain across the cell, it is not real.
+        // the rain is sub-grid, so the day is not 「弱い雨」 — but it is not a
+        // plain 晴れ either, hence the hedge.
         const codes = fill(1, {9: 51, 10: 51, 11: 53, 12: 53, 13: 53, 14: 51, 15: 51});
-        expect(day(codes, fill(20))).toBe(1);
-        // Same codes under a genuinely cloudy sky are believed.
+        expect(day(codes, fill(20))).toEqual({sky: 1, patchy: 53});
+        // Same codes under a genuinely cloudy sky are believed outright.
         expect(day(codes, fill(90))).toBe(53);
     });
 
@@ -72,8 +73,8 @@ describe("summarizeDayWeather", () => {
     });
 
     test("describes the sky from the average daytime cloud cover", () => {
-        // JMA's bands: 快晴 <15%, 晴れ <50%, 晴れ（雲多め）<85%, 曇り otherwise.
-        expect(day(fill(3), fill(5))).toBe(0);
+        // 快晴 is absent on purpose: JMA never publishes it in a forecast.
+        expect(day(fill(3), fill(5))).toBe(1);
         expect(day(fill(0), fill(30))).toBe(1);
         expect(day(fill(0), fill(70))).toBe(2);
         expect(day(fill(0), fill(95))).toBe(3);
@@ -81,12 +82,25 @@ describe("summarizeDayWeather", () => {
 
     test("is not swayed by a single overcast hour", () => {
         // 12 clear daytime hours plus one hour of high cloud is a clear day.
-        expect(day(fill(0), fill(5, {18: 96}))).toBe(0);
+        expect(day(fill(0), fill(5, {18: 96}))).toBe(1);
+    });
+
+    test("hedges with 所により when lasting light rain was rejected", () => {
+        // The model wants light rain for six hours under an open sky: sub-grid
+        // and patchy, so neither 「雨」 nor a bare 「晴れ」 is honest.
+        const codes = fill(1, {9: 51, 10: 51, 11: 53, 12: 53, 13: 51, 14: 51});
+        expect(day(codes, fill(20), fill(0.2))).toEqual({sky: 1, patchy: 53});
+        // A single hour is not enough to hedge on.
+        expect(day(fill(1, {9: 51}), fill(20), fill(0.2))).toBe(1);
     });
 
     test("falls back to the codes when no cloud data is available", () => {
         expect(summarizeDayWeather(TIMES, fill(0, {12: 3, 13: 3}), null, null, "2026-06-15")).toBe(3);
         expect(summarizeDayWeather(TIMES, fill(0, {18: 3}), null, null, "2026-06-15")).toBe(0);
+        // With no cloud data there is nothing to hedge against, so the rejected
+        // light rain simply does not appear.
+        expect(summarizeDayWeather(TIMES, fill(1, {9: 51, 10: 51}), null, fill(0.1), "2026-06-15"))
+            .toBe(1);
     });
 
     test("returns null when the day has no hourly data", () => {
@@ -478,7 +492,7 @@ describe("getDailyForecast", () => {
         // weather_code is 53 (霧雨); the block must report the daytime instead.
         expect(dailyResponse.daily.weather_code[0]).toBe(53);
         expect(await block.getDailyForecast({DAILY_ITEM: "weather", DAY: 0, ZIP: "100-0001"}))
-            .toBe("快晴");
+            .toBe("晴れ");
     });
 
     test("still reports short but significant weather", async () => {
