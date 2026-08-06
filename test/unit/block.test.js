@@ -459,6 +459,124 @@ describe("getPlaceName", () => {
     });
 });
 
+describe("failure caching", () => {
+    const runtime = {
+        formatMessage: msg => msg.default
+    };
+
+    const forecastResponse = {
+        utc_offset_seconds: 32400,
+        hourly: {
+            time: ["2026-06-07T12:00", "2026-06-07T13:00", "2026-06-07T14:00"],
+            temperature_2m: [20, 21, 22]
+        }
+    };
+
+    let now;
+    let geoCalls;
+    let forecastCalls;
+    let geoFails;
+    let forecastFails;
+
+    beforeEach(() => {
+        now = Date.parse("2026-06-07T03:00:00Z"); // 12:00 JST
+        geoCalls = 0;
+        forecastCalls = 0;
+        geoFails = false;
+        forecastFails = false;
+        jest.spyOn(Date, "now").mockImplementation(() => now);
+        global.fetch = jest.fn(url => {
+            if (url.startsWith("https://geoapi.heartrails.com/")) {
+                geoCalls++;
+                if (geoFails) return Promise.reject(new Error("offline"));
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        response: {
+                            location: [{
+                                y: "35.68", x: "139.76",
+                                prefecture: "東京都", city: "千代田区"
+                            }]
+                        }
+                    })
+                });
+            }
+            forecastCalls++;
+            // Open-Meteo answers 429 when the shared classroom IP is rate limited.
+            if (forecastFails) return Promise.resolve({ok: false, status: 429});
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve(forecastResponse)
+            });
+        });
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    test("a failed postal-code lookup is retried instead of sticking forever", async () => {
+        const block = new blockClass(runtime);
+        geoFails = true;
+        expect(await block.getPlaceName({ZIP: "100-0001"})).toBe("");
+        expect(geoCalls).toBe(1);
+
+        // Inside the failure TTL the request is throttled, so a `forever` loop
+        // cannot hammer the API.
+        now += 5 * 1000;
+        expect(await block.getPlaceName({ZIP: "100-0001"})).toBe("");
+        expect(geoCalls).toBe(1);
+
+        // Past the failure TTL it retries and recovers.
+        now += 20 * 1000;
+        geoFails = false;
+        expect(await block.getPlaceName({ZIP: "100-0001"})).toBe("東京都千代田区");
+        expect(geoCalls).toBe(2);
+    });
+
+    test("a resolved postal code stays cached for the whole session", async () => {
+        const block = new blockClass(runtime);
+        expect(await block.getPlaceName({ZIP: "100-0001"})).toBe("東京都千代田区");
+        now += 60 * 60 * 1000;
+        expect(await block.getPlaceName({ZIP: "100-0001"})).toBe("東京都千代田区");
+        expect(geoCalls).toBe(1);
+    });
+
+    test("a rate-limited forecast is retried in seconds, not after the full TTL", async () => {
+        const block = new blockClass(runtime);
+        forecastFails = true;
+        expect(await block.getForecast({ITEM: "temperature", HOURS: 0, ZIP: "100-0001"}))
+            .toBe("");
+        expect(forecastCalls).toBe(1);
+
+        now += 5 * 1000;
+        expect(await block.getForecast({ITEM: "temperature", HOURS: 0, ZIP: "100-0001"}))
+            .toBe("");
+        expect(forecastCalls).toBe(1);
+
+        now += 20 * 1000;
+        forecastFails = false;
+        expect(await block.getForecast({ITEM: "temperature", HOURS: 0, ZIP: "100-0001"}))
+            .toBe(20);
+        expect(forecastCalls).toBe(2);
+    });
+
+    test("a successful forecast is still cached for the full TTL", async () => {
+        const block = new blockClass(runtime);
+        expect(await block.getForecast({ITEM: "temperature", HOURS: 0, ZIP: "100-0001"}))
+            .toBe(20);
+        now += 9 * 60 * 1000;
+        expect(await block.getForecast({ITEM: "temperature", HOURS: 0, ZIP: "100-0001"}))
+            .toBe(20);
+        expect(forecastCalls).toBe(1);
+
+        now += 2 * 60 * 1000; // past FORECAST_TTL
+        expect(await block.getForecast({ITEM: "temperature", HOURS: 0, ZIP: "100-0001"}))
+            .toBe(20);
+        expect(forecastCalls).toBe(2);
+    });
+});
+
 describe("windDirectionToJa", () => {
     test("maps degrees to 16-point compass labels", () => {
         expect(windDirectionToJa(0)).toBe("北");

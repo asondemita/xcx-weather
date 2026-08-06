@@ -56,6 +56,15 @@ const FORECAST_API = 'https://api.open-meteo.com/v1/forecast';
 const FORECAST_TTL = 10 * 60 * 1000;
 
 /**
+ * Time-to-live (ms) for a cached *failure* (network error, HTTP error, rate
+ * limit, unknown postal code). Kept far shorter than FORECAST_TTL so a
+ * transient failure does not blank the blocks for ten minutes, but long enough
+ * that a `forever` loop calling a block every frame cannot hammer the API.
+ * @type {number}
+ */
+const FAILURE_TTL = 20 * 1000;
+
+/**
  * Number of forecast days requested from Open-Meteo. The window starts at today
  * 00:00 local time, so this reaches roughly three days past the current hour.
  * Hours beyond it report an empty value.
@@ -221,6 +230,37 @@ const parseLooseNumber = raw => {
 };
 
 /**
+ * Read a cached request, treating an expired entry as absent.
+ * @param {Object.<string, {data: Promise<?object>, expiresAt: number}>} cache - cache to read
+ * @param {string} key - cache key
+ * @returns {?Promise<?object>} - the cached request, or null when absent/expired
+ */
+const readCache = (cache, key) => {
+    const entry = cache[key];
+    if (!entry || Date.now() >= entry.expiresAt) return null;
+    return entry.data;
+};
+
+/**
+ * Store an in-flight request, shortening its lifetime if it turns out to have
+ * failed. Concurrent callers still share the single in-flight promise, so a
+ * block used inside a `forever` loop issues at most one request per TTL.
+ * @param {Object.<string, {data: Promise<?object>, expiresAt: number}>} cache - cache to write
+ * @param {string} key - cache key
+ * @param {Promise<?object>} request - in-flight request, which resolves to null on failure
+ * @param {number} ttl - lifetime (ms) to keep a successful result
+ * @returns {Promise<?object>} - the same request
+ */
+const writeCache = (cache, key, request, ttl) => {
+    const entry = {data: request, expiresAt: Date.now() + ttl};
+    cache[key] = entry;
+    request.then(result => {
+        if (!result) entry.expiresAt = Math.min(entry.expiresAt, Date.now() + FAILURE_TTL);
+    });
+    return request;
+};
+
+/**
  * Normalize a Japanese postal code into the "NNN-NNNN" form expected by the API.
  * Accepts half-width or full-width digits, with or without a hyphen
  * (e.g. "1000001", "100-0001", "１０００００１", "１００－０００１").
@@ -299,19 +339,19 @@ class ExtensionBlocks {
 
         /**
          * Cache of postal-code -> {latitude, longitude} lookups.
-         * @type {Object.<string, Promise<?object>>}
+         * @type {Object.<string, {data: Promise<?object>, expiresAt: number}>}
          */
         this._geoCache = {};
 
         /**
-         * Cache of location -> {time, data} forecast results.
-         * @type {Object.<string, {fetchedAt: number, data: Promise<?object>}>}
+         * Cache of location -> hourly forecast results.
+         * @type {Object.<string, {data: Promise<?object>, expiresAt: number}>}
          */
         this._forecastCache = {};
 
         /**
-         * Cache of location -> {time, data} daily (weekly) forecast results.
-         * @type {Object.<string, {fetchedAt: number, data: Promise<?object>}>}
+         * Cache of location -> daily (weekly) forecast results.
+         * @type {Object.<string, {data: Promise<?object>, expiresAt: number}>}
          */
         this._dailyCache = {};
     }
@@ -571,7 +611,8 @@ class ExtensionBlocks {
      * @returns {Promise<?{latitude: number, longitude: number}>} - coordinates or null
      */
     _lookupLocation (zip) {
-        if (this._geoCache[zip]) return this._geoCache[zip];
+        const cached = readCache(this._geoCache, zip);
+        if (cached) return cached;
         const request = fetch(`${ZIP_API}${zip.replace('-', '')}`)
             .then(res => (res.ok ? res.json() : null))
             .then(json => {
@@ -589,8 +630,9 @@ class ExtensionBlocks {
                 };
             })
             .catch(() => null);
-        this._geoCache[zip] = request;
-        return request;
+        // A resolved location never changes, so keep it for the whole session;
+        // writeCache still expires a failure quickly.
+        return writeCache(this._geoCache, zip, request, Infinity);
     }
 
     /**
@@ -600,11 +642,8 @@ class ExtensionBlocks {
      */
     _fetchForecast (location) {
         const key = `${location.latitude.toFixed(3)},${location.longitude.toFixed(3)}`;
-        const cached = this._forecastCache[key];
-        const now = Date.now();
-        if (cached && (now - cached.fetchedAt) < FORECAST_TTL) {
-            return cached.data;
-        }
+        const cached = readCache(this._forecastCache, key);
+        if (cached) return cached;
         const params = new URLSearchParams({
             latitude: String(location.latitude),
             longitude: String(location.longitude),
@@ -618,8 +657,7 @@ class ExtensionBlocks {
         const request = fetch(`${FORECAST_API}?${params.toString()}`)
             .then(res => (res.ok ? res.json() : null))
             .catch(() => null);
-        this._forecastCache[key] = {fetchedAt: now, data: request};
-        return request;
+        return writeCache(this._forecastCache, key, request, FORECAST_TTL);
     }
 
     /**
@@ -629,11 +667,8 @@ class ExtensionBlocks {
      */
     _fetchDailyForecast (location) {
         const key = `${location.latitude.toFixed(3)},${location.longitude.toFixed(3)}`;
-        const cached = this._dailyCache[key];
-        const now = Date.now();
-        if (cached && (now - cached.fetchedAt) < FORECAST_TTL) {
-            return cached.data;
-        }
+        const cached = readCache(this._dailyCache, key);
+        if (cached) return cached;
         const params = new URLSearchParams({
             latitude: String(location.latitude),
             longitude: String(location.longitude),
@@ -646,8 +681,7 @@ class ExtensionBlocks {
         const request = fetch(`${FORECAST_API}?${params.toString()}`)
             .then(res => (res.ok ? res.json() : null))
             .catch(() => null);
-        this._dailyCache[key] = {fetchedAt: now, data: request};
-        return request;
+        return writeCache(this._dailyCache, key, request, FORECAST_TTL);
     }
 
     /**
