@@ -564,6 +564,169 @@ const normalizeZip = raw => {
 };
 
 /**
+ * Items offered by the hourly block's dropdown, in display order.
+ * @type {Array.<{id: string, default: string, description: string, value: string}>}
+ */
+const ITEM_MENU = [
+    {
+        id: 'weatherForecast.item.weather',
+        default: 'weather',
+        description: 'weather menu item',
+        value: 'weather'
+    },
+    {
+        id: 'weatherForecast.item.temperature',
+        default: 'temperature',
+        description: 'temperature menu item',
+        value: 'temperature'
+    },
+    {
+        id: 'weatherForecast.item.humidity',
+        default: 'humidity',
+        description: 'relative humidity menu item',
+        value: 'humidity'
+    },
+    {
+        id: 'weatherForecast.item.pressure',
+        default: 'pressure',
+        description: 'sea-level pressure menu item',
+        value: 'pressure'
+    },
+    {
+        id: 'weatherForecast.item.precipitation',
+        default: 'precipitation probability',
+        description: 'precipitation probability menu item',
+        value: 'precipitation'
+    },
+    {
+        id: 'weatherForecast.item.precipAmount',
+        default: 'precipitation amount',
+        description: 'precipitation amount menu item',
+        value: 'precipAmount'
+    },
+    {
+        id: 'weatherForecast.item.windspeed',
+        default: 'wind speed',
+        description: 'wind speed menu item',
+        value: 'windspeed'
+    },
+    {
+        id: 'weatherForecast.item.winddir',
+        default: 'wind direction',
+        description: 'wind direction menu item',
+        value: 'winddir'
+    },
+    {
+        id: 'weatherForecast.item.wbgt',
+        default: 'heat index (WBGT)',
+        description: 'WBGT value menu item',
+        value: 'wbgt'
+    },
+    {
+        id: 'weatherForecast.item.wbgtLevel',
+        default: 'heat risk level (WBGT)',
+        description: 'WBGT danger level menu item',
+        value: 'wbgtLevel'
+    },
+    {
+        id: 'weatherForecast.item.uvIndex',
+        default: 'UV index',
+        description: 'UV index menu item',
+        value: 'uvIndex'
+    }
+];
+
+/**
+ * Items offered by the weekly block's dropdown, in display order.
+ * @type {Array.<{id: string, default: string, description: string, value: string}>}
+ */
+const DAILY_ITEM_MENU = [
+    {
+        id: 'weatherForecast.daily.weather',
+        default: 'weather',
+        description: 'daily weather menu item',
+        value: 'weather'
+    },
+    {
+        id: 'weatherForecast.daily.tempMax',
+        default: 'highest temperature',
+        description: 'daily max temperature menu item',
+        value: 'tempMax'
+    },
+    {
+        id: 'weatherForecast.daily.tempMin',
+        default: 'lowest temperature',
+        description: 'daily min temperature menu item',
+        value: 'tempMin'
+    },
+    {
+        id: 'weatherForecast.daily.precipitation',
+        default: 'precipitation probability',
+        description: 'daily precipitation probability menu item',
+        value: 'precipitation'
+    },
+    {
+        id: 'weatherForecast.daily.precipAmount',
+        default: 'precipitation amount',
+        description: 'daily precipitation amount menu item',
+        value: 'precipAmount'
+    },
+    {
+        id: 'weatherForecast.daily.sunrise',
+        default: 'sunrise',
+        description: 'daily sunrise time menu item',
+        value: 'sunrise'
+    },
+    {
+        id: 'weatherForecast.daily.sunset',
+        default: 'sunset',
+        description: 'daily sunset time menu item',
+        value: 'sunset'
+    },
+    {
+        id: 'weatherForecast.daily.sunshine',
+        default: 'sunshine duration',
+        description: 'daily sunshine duration menu item',
+        value: 'sunshine'
+    }
+];
+
+/**
+ * Build a Scratch menu from descriptors, translating each label.
+ * @param {Array.<object>} descriptors - menu descriptors
+ * @returns {object} - menu definition for getInfo
+ */
+const buildMenu = descriptors => ({
+    acceptReporters: true,
+    items: descriptors.map(descriptor => ({
+        text: formatMessage(descriptor),
+        value: descriptor.value
+    }))
+});
+
+/**
+ * Resolve whatever arrived in a menu slot to one of its values.
+ *
+ * The menus set `acceptReporters`, so a reporter block can be dropped in — and
+ * what it supplies is usually the label the user can see (「気温」), not the
+ * internal value. Accept the label in any locale, and tolerate the stray
+ * whitespace that `join` blocks tend to leave behind.
+ * @param {Array.<object>} descriptors - menu descriptors
+ * @param {string} raw - the value the block received
+ * @returns {string} - a menu value, or the input unchanged when nothing matches
+ */
+const resolveMenuValue = (descriptors, raw) => {
+    const text = String(raw).trim();
+    const match = descriptors.find(descriptor => {
+        if (descriptor.value === text) return true;
+        if (formatMessage(descriptor) === text) return true;
+        return Object.keys(translations).some(locale =>
+            translations[locale][descriptor.id] === text);
+    });
+    return match ? match.value : raw;
+};
+
+/**
  * Scratch 3.0 blocks to get a weather forecast from Open-Meteo.
  */
 class ExtensionBlocks {
@@ -729,168 +892,8 @@ class ExtensionBlocks {
                 }
             ],
             menus: {
-                itemMenu: {
-                    acceptReporters: true,
-                    items: [
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.item.weather',
-                                default: 'weather',
-                                description: 'weather menu item'
-                            }),
-                            value: 'weather'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.item.temperature',
-                                default: 'temperature',
-                                description: 'temperature menu item'
-                            }),
-                            value: 'temperature'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.item.humidity',
-                                default: 'humidity',
-                                description: 'relative humidity menu item'
-                            }),
-                            value: 'humidity'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.item.pressure',
-                                default: 'pressure',
-                                description: 'sea-level pressure menu item'
-                            }),
-                            value: 'pressure'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.item.precipitation',
-                                default: 'precipitation probability',
-                                description: 'precipitation probability menu item'
-                            }),
-                            value: 'precipitation'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.item.precipAmount',
-                                default: 'precipitation amount',
-                                description: 'precipitation amount menu item'
-                            }),
-                            value: 'precipAmount'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.item.windspeed',
-                                default: 'wind speed',
-                                description: 'wind speed menu item'
-                            }),
-                            value: 'windspeed'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.item.winddir',
-                                default: 'wind direction',
-                                description: 'wind direction menu item'
-                            }),
-                            value: 'winddir'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.item.wbgt',
-                                default: 'heat index (WBGT)',
-                                description: 'WBGT value menu item'
-                            }),
-                            value: 'wbgt'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.item.wbgtLevel',
-                                default: 'heat risk level (WBGT)',
-                                description: 'WBGT danger level menu item'
-                            }),
-                            value: 'wbgtLevel'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.item.uvIndex',
-                                default: 'UV index',
-                                description: 'UV index menu item'
-                            }),
-                            value: 'uvIndex'
-                        }
-                    ]
-                },
-                dailyItemMenu: {
-                    acceptReporters: true,
-                    items: [
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.daily.weather',
-                                default: 'weather',
-                                description: 'daily weather menu item'
-                            }),
-                            value: 'weather'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.daily.tempMax',
-                                default: 'highest temperature',
-                                description: 'daily max temperature menu item'
-                            }),
-                            value: 'tempMax'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.daily.tempMin',
-                                default: 'lowest temperature',
-                                description: 'daily min temperature menu item'
-                            }),
-                            value: 'tempMin'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.daily.precipitation',
-                                default: 'precipitation probability',
-                                description: 'daily precipitation probability menu item'
-                            }),
-                            value: 'precipitation'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.daily.precipAmount',
-                                default: 'precipitation amount',
-                                description: 'daily precipitation amount menu item'
-                            }),
-                            value: 'precipAmount'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.daily.sunrise',
-                                default: 'sunrise',
-                                description: 'daily sunrise time menu item'
-                            }),
-                            value: 'sunrise'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.daily.sunset',
-                                default: 'sunset',
-                                description: 'daily sunset time menu item'
-                            }),
-                            value: 'sunset'
-                        },
-                        {
-                            text: formatMessage({
-                                id: 'weatherForecast.daily.sunshine',
-                                default: 'sunshine duration',
-                                description: 'daily sunshine duration menu item'
-                            }),
-                            value: 'sunshine'
-                        }
-                    ]
-                }
+                itemMenu: buildMenu(ITEM_MENU),
+                dailyItemMenu: buildMenu(DAILY_ITEM_MENU)
             }
         };
     }
@@ -1024,7 +1027,7 @@ class ExtensionBlocks {
      * @returns {Promise<(string|number)>} - the requested value, or '' on failure
      */
     getForecast (args) {
-        const item = Cast.toString(args.ITEM);
+        const item = resolveMenuValue(ITEM_MENU, Cast.toString(args.ITEM));
         const hours = parseLooseNumber(args.HOURS);
         const zip = normalizeZip(args.ZIP);
         // Reject non-numeric or past times; out-of-window times are caught below.
@@ -1118,7 +1121,7 @@ class ExtensionBlocks {
      * @returns {Promise<(string|number)>} - the requested value, or '' on failure
      */
     getDailyForecast (args) {
-        const item = Cast.toString(args.DAILY_ITEM);
+        const item = resolveMenuValue(DAILY_ITEM_MENU, Cast.toString(args.DAILY_ITEM));
         const dayValue = parseLooseNumber(args.DAY);
         const zip = normalizeZip(args.ZIP);
         // Reject before rounding: Math.round(-0.4) is -0, and -0 < 0 is false.
