@@ -211,6 +211,18 @@ describe("getForecast", () => {
         expect(result).toBe("");
     });
 
+    test("returns '' just past the end of the window, not the last hour again", async () => {
+        const block = new blockClass(runtime);
+        // Data ends at 14:00 (= 2h ahead). Half a grid step past it still counts...
+        expect(await block.getForecast({ITEM: "temperature", HOURS: 2.5, ZIP: "100-0001"}))
+            .toBe(22);
+        // ...but a full hour past the end is outside the window.
+        expect(await block.getForecast({ITEM: "temperature", HOURS: 3, ZIP: "100-0001"}))
+            .toBe("");
+        expect(await block.getForecast({ITEM: "precipAmount", HOURS: 4, ZIP: "100-0001"}))
+            .toBe("");
+    });
+
     test("returns '' for non-numeric or negative hours", async () => {
         const block = new blockClass(runtime);
         expect(await block.getForecast({ITEM: "temperature", HOURS: "abc", ZIP: "100-0001"}))
